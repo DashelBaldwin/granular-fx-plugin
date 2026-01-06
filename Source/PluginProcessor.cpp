@@ -88,7 +88,15 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
 {
     // Use this method as the place to do any pre-playback
     // initialisation that you need..
-    juce::ignoreUnused (sampleRate, samplesPerBlock);
+    juce::ignoreUnused (samplesPerBlock);
+
+    currentSampleRate = sampleRate;
+
+    delayBufferSize = static_cast<int>(currentSampleRate*2.0);
+
+    delayBuffer.setSize(getTotalNumInputChannels(), delayBufferSize);
+    delayBuffer.clear();
+    delayWritePos = 0;
 }
 
 void AudioPluginAudioProcessor::releaseResources()
@@ -129,6 +137,9 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     juce::ScopedNoDenormals noDenormals;
     auto totalNumInputChannels  = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
+    auto numSamples = buffer.getNumSamples();
+
+    int delaySamples = static_cast<int>(0.25 * currentSampleRate);
 
     // In case we have more outputs than inputs, this code clears any output
     // channels that didn't contain input data, (because these aren't
@@ -137,7 +148,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     // when they first compile a plugin, but obviously you don't need to keep
     // this code if your algorithm always overwrites all the output channels.
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
-        buffer.clear (i, 0, buffer.getNumSamples());
+        buffer.clear (i, 0, numSamples);
 
     // This is the place where you'd normally do the guts of your plugin's
     // audio processing...
@@ -147,10 +158,35 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     // interleaved by keeping the same state.
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
-        auto* channelData = buffer.getWritePointer (channel);
-        juce::ignoreUnused (channelData);
-        // ..do something to the data...
+        auto* channelData = buffer.getWritePointer(channel);
+        auto* delayData = delayBuffer.getWritePointer(channel);
+
+        // Copy of the write pos so each channel starts from the same spot in the buffer
+        int tempWritePos = delayWritePos; 
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float inputSample = channelData[i];
+
+            int readPos = tempWritePos - delaySamples;
+            if (readPos < 0)
+                readPos += delayBufferSize;
+
+            float delayedSample = delayData[readPos];
+
+            delayData[tempWritePos] = inputSample;
+
+            channelData[i] = (inputSample * 0.7f) + (delayedSample * 0.3f);
+
+            tempWritePos++;
+            if (tempWritePos >= delayBufferSize)
+                tempWritePos = 0;
+        }
     }
+
+    delayWritePos += numSamples;
+    if (delayWritePos >= delayBufferSize)
+        delayWritePos %= delayBufferSize;
 }
 
 //==============================================================================

@@ -45,4 +45,10 @@ public:
 private:
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
+
+    double currentSampleRate = 44100.0;
+
+    juce::AudioBuffer<float> delayBuffer;
+    int delayWritePos = 0;
+    int delayBufferSize = 0;
 };

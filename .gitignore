@@ -31,6 +31,8 @@
 *.out
 *.app
 
+*.vs
+
 .DS_Store
 .idea/
 Build/
