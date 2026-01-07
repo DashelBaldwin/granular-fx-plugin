@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "Grain.h"
 
 //==============================================================================
 class AudioPluginAudioProcessor final : public juce::AudioProcessor
@@ -45,6 +46,12 @@ public:
 private:
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
+
+    static constexpr int maxGrains = 32; // Number of overlapping grains
+    Grain grainPool[maxGrains];          // Pre-allocated grains
+    
+    int grainIntervalSamples;            // How often to start a new grain
+    int samplesUntilNextGrain = 0;
 
     double currentSampleRate = 44100.0;
 

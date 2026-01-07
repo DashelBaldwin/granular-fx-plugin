@@ -33,6 +33,7 @@ set(SourceFiles
         Source/PluginEditor.h
         Source/PluginProcessor.cpp
         Source/PluginProcessor.h
+        Source/Grain.h
 )
 
 # Change these to your own preferences

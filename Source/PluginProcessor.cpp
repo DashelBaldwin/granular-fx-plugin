@@ -92,7 +92,7 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
 
     currentSampleRate = sampleRate;
 
-    delayBufferSize = static_cast<int>(currentSampleRate*2.0);
+    delayBufferSize = static_cast<int>(currentSampleRate*5.0);
 
     delayBuffer.setSize(getTotalNumInputChannels(), delayBufferSize);
     delayBuffer.clear();
@@ -133,54 +133,70 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                                               juce::MidiBuffer& midiMessages)
 {
     juce::ignoreUnused (midiMessages);
-
     juce::ScopedNoDenormals noDenormals;
+
     auto totalNumInputChannels  = getTotalNumInputChannels();
     auto totalNumOutputChannels = getTotalNumOutputChannels();
     auto numSamples = buffer.getNumSamples();
 
-    int delaySamples = static_cast<int>(0.25 * currentSampleRate);
-
-    // In case we have more outputs than inputs, this code clears any output
-    // channels that didn't contain input data, (because these aren't
-    // guaranteed to be empty - they may contain garbage).
-    // This is here to avoid people getting screaming feedback
-    // when they first compile a plugin, but obviously you don't need to keep
-    // this code if your algorithm always overwrites all the output channels.
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, numSamples);
 
-    // This is the place where you'd normally do the guts of your plugin's
-    // audio processing...
-    // Make sure to reset the state if your inner loop is processing
-    // the samples and the outer loop is handling the channels.
-    // Alternatively, you can process the samples with the channels
-    // interleaved by keeping the same state.
     for (int channel = 0; channel < totalNumInputChannels; ++channel)
     {
-        auto* channelData = buffer.getWritePointer(channel);
-        auto* delayData = delayBuffer.getWritePointer(channel);
-
-        // Copy of the write pos so each channel starts from the same spot in the buffer
-        int tempWritePos = delayWritePos; 
-
+        const float* input = buffer.getReadPointer(channel);
+        float* delayData = delayBuffer.getWritePointer(channel);
+        
+        int tempWritePos = delayWritePos;
         for (int i = 0; i < numSamples; ++i)
         {
-            const float inputSample = channelData[i];
+            delayData[tempWritePos] = input[i];
+            if (++tempWritePos >= delayBufferSize) tempWritePos = 0;
+        }
+    }
 
-            int readPos = tempWritePos - delaySamples;
-            if (readPos < 0)
-                readPos += delayBufferSize;
+    samplesUntilNextGrain -= numSamples;
+    if (samplesUntilNextGrain <= 0)
+    {
+        samplesUntilNextGrain = static_cast<int>(0.005 * currentSampleRate);
 
-            float delayedSample = delayData[readPos];
+        for (auto& g : grainPool)
+        {
+            if (!g.isActive)
+            {
+                g.durationSamples = static_cast<int>(0.1 * currentSampleRate);
+                g.samplesProcessed = 0;
+                
+                float jitter = (juce::Random::getSystemRandom().nextFloat() - 0.25f) * (currentSampleRate * 0.4f);
+                g.currentPos = delayWritePos - (0.45f * currentSampleRate) + jitter;
+                
+                while (g.currentPos < 0) g.currentPos += delayBufferSize;
+                while (g.currentPos >= delayBufferSize) g.currentPos -= delayBufferSize;
 
-            delayData[tempWritePos] = inputSample;
+                g.isActive = true;
+                break; 
+            }
+        }
+    }
 
-            channelData[i] = (inputSample * 0.7f) + (delayedSample * 0.3f);
+    for (int i = 0; i < numSamples; ++i)
+    {
+        for (int channel = 0; channel < totalNumInputChannels; ++channel)
+        {
+            float* channelData = buffer.getWritePointer(channel);
+            float inputSample = channelData[i];
+            float grainOutput = 0.0f;
 
-            tempWritePos++;
-            if (tempWritePos >= delayBufferSize)
-                tempWritePos = 0;
+            for (auto& g : grainPool)
+            {
+                if (g.isActive)
+                {
+                    bool isLastChannel = (channel == totalNumInputChannels - 1);
+                    grainOutput += g.processSample(delayBuffer, channel, delayBufferSize, isLastChannel);
+                }
+            }
+
+            channelData[i] = (inputSample * 0.5f) + (grainOutput * 0.5f);
         }
     }
 
