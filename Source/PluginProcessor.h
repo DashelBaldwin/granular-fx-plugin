@@ -60,13 +60,14 @@ private:
 
     // These will later be linked to APVTS
     float paramSpliceMs = 600.0f; // 0.1 to 2000 (ms)
-    float paramDelayMs = 200.0f;    // 0.1 to 1000 (ms)
-    float paramPitch = 2.0f;      // 0.5 to 2.0 (pitch scale)
-    float paramDensity = 2.0f;   // 1 to 32 (# grains)
-    float paramFeedback = 0.75f;  // 0.0 to 1.0 (%)
-    float paramSpread = 0.1f;     // 0.0 to 1.0 (in seconds)
+    float paramDelayMs = 200.0f; // 0.1 to 1000 (ms)
+    float paramPitch = 2.0f; // 0.5 to 2.0 (pitch scale)
+    float paramDensity = 2.0f; // 1 to 32 (# grains)
+    float paramFeedback = 0.6f; // 0.0 to 1.0 (%)
+    float paramSpread = 0.1f; // 0.0 to 1.0 (in seconds)
+    float paramWidth = 1.0f; // 0.0 to 1.0
+    float paramTone = 0.85f; // 0.0 to 1.0
     bool  paramReverse = true;
-    float paramTone = 0.75f;
     float paramMix = 0.40f;
 
     // DC blocker

@@ -122,18 +122,21 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
     int triggerInterval = static_cast<int>(spliceSamples / paramDensity);
 
     // Get write pointer for the first channel (mono output for now)
-    auto* channelData = buffer.getWritePointer(0);
+    auto* leftChannel = buffer.getWritePointer(0);
+    auto* rightChannel = (totalNumInputChannels>1) ? buffer.getWritePointer(1) : nullptr;
 
-    // Calculate tone values
+    // Calculate tone filter coefficients
     float toneHz = juce::jmap(paramTone, 200.0f, 20000.0f); // Test if this linear scale is fine, otherwise change to logarithmic
     float alpha = 1.0f - std::exp(-2.0f * juce::MathConstants<float>::pi * toneHz / (float)currentSampleRate);
 
     for (int i = 0; i < numSamples; ++i) {
-        float inputSample = channelData[i];
+        float inputL = leftChannel[i];
+        float inputR = rightChannel ? rightChannel[i] : inputL;
+        float monoInput = (inputL + inputR) * 0.5f;
 
         // --- FEEDBACK ---
         // Add previous output back into buffer with DC blocker, tone filter, and tanh saturation
-        float rawFeedback = inputSample + (lastOutput * paramFeedback);
+        float rawFeedback = monoInput + (lastOutput * paramFeedback);
 
         hpfState = 0.995f * (hpfState + rawFeedback - lastFeedbackInput);
         lastFeedbackInput = rawFeedback;
@@ -144,7 +147,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
         circularBuffer.write(feedbackSample, writePos);
 
         // --- TRIGGER GRAINS ---
-        // Trigger a new grain with delay and random spread at regular intervals
+        // Trigger a new grain with delay + random spread and panning at regular intervals
         if (samplesUntilNextGrain <= 0) {
             for (auto& g : grainPool) {
                 if (!g.isActive) {
@@ -161,7 +164,10 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
 
                     float totalInitialOffset = clampedBaseDelay + spread;
 
-                    g.trigger(writePos, totalInitialOffset, paramPitch, (int)spliceSamples, paramReverse);
+                    float randomSide = juce::Random::getSystemRandom().nextFloat() * 2.0f - 1.0f; // -1.0 to 1.0
+                    float grainPan = 0.5f + (randomSide * 0.5f * paramWidth);
+
+                    g.trigger(writePos, totalInitialOffset, paramPitch, (int)spliceSamples, paramReverse, grainPan);
                     break;
                 }
             }
@@ -171,32 +177,35 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
 
         // --- PROCESS ---
         // Sum active grains
-        float grainSum = 0.0f;
+        float grainSumL = 0.0f;
+        float grainSumR = 0.0f;
         for (auto& g : grainPool) {
-            if (g.isActive)
-                grainSum += g.process(circularBuffer, bufferSize);
+            if (g.isActive) {
+                float grainSample = g.process(circularBuffer, bufferSize);
+
+                // Constant power panning
+                float panRads = g.pan * juce::MathConstants<float>::halfPi;
+                grainSumL += grainSample * std::cos(panRads);
+                grainSumR += grainSample * std::sin(panRads);
+            }
         }
 
         // --- VOLUME ADJUSTMENT AND MIX ---
         // Scale grain volume by 1/sqrt(Density), calculate wet, mix
-        float densityScale = 1.0f / std::sqrt(paramDensity);
-        float wetSignal = grainSum * densityScale;
+        float densityScale = 1.0f / std::sqrt(std::max(1.0f, paramDensity));
+        float wetL = grainSumL * densityScale;
+        float wetR = grainSumR * densityScale;
         
         float dryGain = std::cos(paramMix * juce::MathConstants<float>::halfPi);
         float wetGain = std::sin(paramMix * juce::MathConstants<float>::halfPi);
-
-        float outputSample = (inputSample * dryGain) + (wetSignal * wetGain);
         
-        channelData[i] = outputSample;
-        lastOutput = wetSignal; // Send wet to feedback 
+        leftChannel[i] = (inputL * dryGain) + (wetL * wetGain);
+        if (rightChannel) rightChannel[i] = (inputR * dryGain) + (wetR * wetGain);
+
+        lastOutput = (wetL + wetR) * 0.5f; // Send mono average of wet to feedback 
 
         writePos = (writePos + 1) % bufferSize; // Advance write ptr
     }
-
-    // --- OUTPUT ---
-    // Copy mono channel to all other channels for output
-    for (int c = 1; c < totalNumInputChannels; ++c)
-        buffer.copyFrom(c, 0, buffer.getReadPointer(0), numSamples);
 }
 
 //==============================================================================

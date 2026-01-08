@@ -8,16 +8,18 @@ struct Grain {
     float envIndex = 0.0f;
     float envStep = 0.0f;
     float pitchRatio = 1.0f;
+    float pan = 0.5f;
     bool isReverse = false;
     bool isActive = false;
 
-    void trigger(int writePos, float totalOffset, float pitch, int durationSamples, bool reverse) {
+    void trigger(int writePos, float totalOffset, float pitch, int durationSamples, bool reverse, float newPan) {
         readPos = (float)writePos - totalOffset; // Start position in # samples behind write head
         
         envIndex = 0.0f;
         envStep = 1.0f / (float)durationSamples;
         pitchRatio = pitch;
         isReverse = reverse;
+        pan = newPan;
         isActive = true;
     }
 
