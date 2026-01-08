@@ -56,20 +56,26 @@ private:
     static constexpr int maxGrains = 32;
     Grain grainPool[maxGrains];
 
+    int samplesUntilNextGrain;
+
     // These will later be linked to APVTS
     float paramSpliceMs = 600.0f; // 0.1 to 2000 (ms)
-    float paramDelayMs = 10.0f;    // 0.1 to 1000 (ms)
+    float paramDelayMs = 200.0f;    // 0.1 to 1000 (ms)
     float paramPitch = 2.0f;      // 0.5 to 2.0 (pitch scale)
-    float paramDensity = 16.0f;   // 1 to 32 (# grains)
+    float paramDensity = 2.0f;   // 1 to 32 (# grains)
     float paramFeedback = 0.75f;  // 0.0 to 1.0 (%)
-    float paramSpread = 0.5f;     // 0.0 to 1.0 (in seconds)
+    float paramSpread = 0.1f;     // 0.0 to 1.0 (in seconds)
     bool  paramReverse = true;
-    float paramMix = 0.60f;
+    float paramTone = 0.75f;
+    float paramMix = 0.40f;
 
     // DC blocker
     float hpfState = 0.0f;
     float lastFeedbackInput = 0.0f;
 
-    int samplesUntilNextGrain;
-    float lastOutput = 0.0f; // For feedback
+    // Tone knob
+    float toneState = 0.0f;
+
+    // Feedback
+    float lastOutput = 0.0f; 
 };

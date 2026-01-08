@@ -124,17 +124,23 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
     // Get write pointer for the first channel (mono output for now)
     auto* channelData = buffer.getWritePointer(0);
 
+    // Calculate tone values
+    float toneHz = juce::jmap(paramTone, 200.0f, 20000.0f); // Test if this linear scale is fine, otherwise change to logarithmic
+    float alpha = 1.0f - std::exp(-2.0f * juce::MathConstants<float>::pi * toneHz / (float)currentSampleRate);
+
     for (int i = 0; i < numSamples; ++i) {
         float inputSample = channelData[i];
 
         // --- FEEDBACK ---
-        // Add previous output back into buffer with DC blocker and tanh saturation
+        // Add previous output back into buffer with DC blocker, tone filter, and tanh saturation
         float rawFeedback = inputSample + (lastOutput * paramFeedback);
 
         hpfState = 0.995f * (hpfState + rawFeedback - lastFeedbackInput);
         lastFeedbackInput = rawFeedback;
 
-        float feedbackSample = std::tanh(hpfState);
+        toneState += alpha * (hpfState - toneState);
+
+        float feedbackSample = std::tanh(toneState);
         circularBuffer.write(feedbackSample, writePos);
 
         // --- TRIGGER GRAINS ---
@@ -184,8 +190,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
         channelData[i] = outputSample;
         lastOutput = wetSignal; // Send wet to feedback 
 
-        // Advance write ptr
-        writePos = (writePos + 1) % bufferSize;
+        writePos = (writePos + 1) % bufferSize; // Advance write ptr
     }
 
     // --- OUTPUT ---

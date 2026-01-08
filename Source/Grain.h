@@ -12,8 +12,7 @@ struct Grain {
     bool isActive = false;
 
     void trigger(int writePos, float totalOffset, float pitch, int durationSamples, bool reverse) {
-        // Start position in # samples behind write head
-        readPos = (float)writePos - totalOffset;
+        readPos = (float)writePos - totalOffset; // Start position in # samples behind write head
         
         envIndex = 0.0f;
         envStep = 1.0f / (float)durationSamples;
