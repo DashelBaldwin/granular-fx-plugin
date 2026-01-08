@@ -45,8 +45,6 @@ struct Grain {
         readPos += pitchRatio * direction;
         envIndex += envStep;
 
-
-
         return sample;
     }
 };
