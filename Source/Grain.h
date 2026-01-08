@@ -11,10 +11,9 @@ struct Grain {
     bool isReverse = false;
     bool isActive = false;
 
-    void trigger(int writePos, float delayInSamples, float pitch, int durationSamples, bool reverse) {
+    void trigger(int writePos, float totalOffset, float pitch, int durationSamples, bool reverse) {
         // Start position in # samples behind write head
-        float offset = 5.0f; // Prevents read head from accessing data that hasn't yet been written by the write head
-        readPos = (float)writePos - delayInSamples + (isReverse ? (float)durationSamples - offset : 0.0f);
+        readPos = (float)writePos - totalOffset;
         
         envIndex = 0.0f;
         envStep = 1.0f / (float)durationSamples;
@@ -24,20 +23,20 @@ struct Grain {
     }
 
     float process(const CircularBuffer& buffer, int bufferLength) {
-        if (!isActive) return 0.0f;
-
-        // Force the very last sample of a grain to be 0
-        if (envIndex >= 1.0f - envStep) {
+        // Deactivate if finished
+        if (envIndex >= 1.0f) {
             isActive = false;
             return 0.0f;
         }
+
+        if (!isActive) return 0.0f;
 
         float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * envIndex));
         
         // Wrap read position and read from the buffer
         float wrappedReadPos = std::fmod(readPos, (float)bufferLength);
         if (wrappedReadPos < 0) 
-            wrappedReadPos += bufferLength;
+            wrappedReadPos += (float)bufferLength;
         
         float sample = buffer.read(wrappedReadPos) * window;
 
@@ -46,10 +45,7 @@ struct Grain {
         readPos += pitchRatio * direction;
         envIndex += envStep;
 
-        // Deactivate when finished
-        if (envIndex >= 1.0f) {
-            isActive = false;
-        }
+
 
         return sample;
     }

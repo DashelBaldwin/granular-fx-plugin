@@ -138,9 +138,17 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
             for (auto& g : grainPool) {
                 if (!g.isActive) {
                     float delaySamples = (paramDelayMs / 1000.0f) * (float)currentSampleRate;
+
+                    // If our splice, delay, and pitch settings would cause this grain's read head to advance
+                    // past the write head, the grain should instead use the minimum delay that avoids this problem 
+                    float safetyPadding = 512.0f;
+                    float minSafeDelay = paramReverse ? safetyPadding : (spliceSamples * paramPitch) + safetyPadding;
+
+                    float clampedBaseDelay = std::max(minSafeDelay, delaySamples);
+
                     float spread = juce::Random::getSystemRandom().nextFloat() * paramSpread * (float)currentSampleRate;
 
-                    float totalInitialOffset = delaySamples + spread;
+                    float totalInitialOffset = clampedBaseDelay + spread;
 
                     g.trigger(writePos, totalInitialOffset, paramPitch, (int)spliceSamples, paramReverse);
                     break;
@@ -151,7 +159,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
         samplesUntilNextGrain--;
 
         // --- PROCESS ---
-        // Calculate sum of all active grains
+        // Sum active grains
         float grainSum = 0.0f;
         for (auto& g : grainPool) {
             if (g.isActive)
@@ -159,7 +167,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
         }
 
         // --- VOLUME ADJUSTMENT AND MIX ---
-        // Scale grain volume by 1/sqrt(Density), calculate wet, crossfade dry and wet 
+        // Scale grain volume by 1/sqrt(Density), calculate wet, mix
         float densityScale = 1.0f / std::sqrt(paramDensity);
         float wetSignal = grainSum * densityScale;
         
@@ -169,7 +177,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
         float outputSample = (inputSample * dryGain) + (wetSignal * wetGain);
         
         channelData[i] = outputSample;
-        lastOutput = wetSignal; // Feedback only reads the wet signal
+        lastOutput = wetSignal; // Send wet to feedback 
 
         // Advance write ptr
         writePos = (writePos + 1) % bufferSize;
