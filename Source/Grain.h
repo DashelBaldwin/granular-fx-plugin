@@ -13,7 +13,8 @@ struct Grain {
 
     void trigger(int writePos, float delayInSamples, float pitch, int durationSamples, bool reverse) {
         // Start position in # samples behind write head
-        readPos = (float)writePos - delayInSamples + (isReverse ? durationSamples : 0);
+        float offset = 5.0f; // Prevents read head from accessing data that hasn't yet been written by the write head
+        readPos = (float)writePos - delayInSamples + (isReverse ? (float)durationSamples - offset : 0.0f);
         
         envIndex = 0.0f;
         envStep = 1.0f / (float)durationSamples;
@@ -24,6 +25,12 @@ struct Grain {
 
     float process(const CircularBuffer& buffer, int bufferLength) {
         if (!isActive) return 0.0f;
+
+        // Force the very last sample of a grain to be 0
+        if (envIndex >= 1.0f - envStep) {
+            isActive = false;
+            return 0.0f;
+        }
 
         float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * envIndex));
         

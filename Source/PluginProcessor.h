@@ -50,7 +50,7 @@ private:
 
     int currentSampleRate = 44100;
 
-    CircularBuffer ringBuffer;
+    CircularBuffer circularBuffer;
     int writePos = 0;
     int bufferSize = 1 << 18; // 6s at 44.1
 
@@ -58,14 +58,14 @@ private:
     Grain grainPool[maxGrains];
 
     // These will later be linked to APVTS
-    float paramSpliceMs = 450.0f;
-    float paramDelayMs = 100.0f;
-    float paramPitch = 1.5f;     // 0.5 to 2.0
+    float paramSpliceMs = 10.0f;
+    float paramDelayMs = 10.0f;
+    float paramPitch = 2.0f;     // 0.5 to 2.0
     float paramDensity = 4.0f;   // 1 to 32
-    float paramFeedback = 0.6f;   // 0.0 to 1.0
-    float paramSpread = 0.3f;    // Jitter
+    float paramFeedback = 0.75f;   // 0.0 to 1.0
+    float paramSpread = 0.05f;    // Jitter
     bool  paramReverse = true;
-    float paramMix = 0.4f;
+    float paramMix = 0.95f;
 
     int samplesUntilNextGrain;
     float lastOutput = 0.0f; // For feedback

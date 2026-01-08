@@ -75,7 +75,7 @@ void AudioPluginAudioProcessor::changeProgramName (int index, const juce::String
 void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock) {
     currentSampleRate = sampleRate;
     
-    ringBuffer.respace(bufferSize);
+    circularBuffer.respace(bufferSize);
     
     samplesUntilNextGrain = 0;
     writePos = 0;
@@ -130,7 +130,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
         // --- FEEDBACK ---
         // Add previous output back into buffer with tanh saturation
         float feedbackSample = std::tanh(inputSample + (lastOutput * paramFeedback));
-        ringBuffer.write(feedbackSample, writePos);
+        circularBuffer.write(feedbackSample, writePos);
 
         // --- TRIGGER GRAIN ---
         // Trigger a new grain with delay and random spread at regular intervals
@@ -155,7 +155,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
         float grainSum = 0.0f;
         for (auto& g : grainPool) {
             if (g.isActive)
-                grainSum += g.process(ringBuffer, bufferSize);
+                grainSum += g.process(circularBuffer, bufferSize);
         }
 
         // --- VOLUME ADJUSTMENT AND MIX ---
