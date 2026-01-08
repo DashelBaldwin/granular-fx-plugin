@@ -121,7 +121,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
     float spliceSamples = (paramSpliceMs / 1000.0f) * (float)currentSampleRate;
     int triggerInterval = static_cast<int>(spliceSamples / paramDensity);
 
-    // Get write pointer for the first channel (mono output for now)
+    // Get write ptr for each channel
     auto* leftChannel = buffer.getWritePointer(0);
     auto* rightChannel = (totalNumInputChannels>1) ? buffer.getWritePointer(1) : nullptr;
 
