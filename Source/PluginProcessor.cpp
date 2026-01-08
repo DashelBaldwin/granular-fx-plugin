@@ -128,19 +128,24 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
         float inputSample = channelData[i];
 
         // --- FEEDBACK ---
-        // Add previous output back into buffer with tanh saturation
-        float feedbackSample = std::tanh(inputSample + (lastOutput * paramFeedback));
+        // Add previous output back into buffer with DC blocker and tanh saturation
+        float rawFeedback = inputSample + (lastOutput * paramFeedback);
+
+        hpfState = 0.995f * (hpfState + rawFeedback - lastFeedbackInput);
+        lastFeedbackInput = rawFeedback;
+
+        float feedbackSample = std::tanh(hpfState);
         circularBuffer.write(feedbackSample, writePos);
 
-        // --- TRIGGER GRAIN ---
+        // --- TRIGGER GRAINS ---
         // Trigger a new grain with delay and random spread at regular intervals
         if (samplesUntilNextGrain <= 0) {
             for (auto& g : grainPool) {
                 if (!g.isActive) {
                     float delaySamples = (paramDelayMs / 1000.0f) * (float)currentSampleRate;
 
-                    // If our splice, delay, and pitch settings would cause this grain's read head to advance
-                    // past the write head, the grain should instead use the minimum delay that avoids this problem 
+                    // If our splice, delay, and pitch settings would cause this grain's read head to advance past 
+                    // the write head, the grain should instead use the minimum delay value that avoids this problem
                     float safetyPadding = 512.0f;
                     float minSafeDelay = paramReverse ? safetyPadding : (spliceSamples * paramPitch) + safetyPadding;
 
@@ -183,6 +188,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
         writePos = (writePos + 1) % bufferSize;
     }
 
+    // --- OUTPUT ---
     // Copy mono channel to all other channels for output
     for (int c = 1; c < totalNumInputChannels; ++c)
         buffer.copyFrom(c, 0, buffer.getReadPointer(0), numSamples);

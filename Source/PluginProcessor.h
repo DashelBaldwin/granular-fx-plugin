@@ -5,8 +5,7 @@
 #include "CircularBuffer.h"
 
 //==============================================================================
-class AudioPluginAudioProcessor final : public juce::AudioProcessor
-{
+class AudioPluginAudioProcessor final : public juce::AudioProcessor {
 public:
     //==============================================================================
     AudioPluginAudioProcessor();
@@ -58,14 +57,18 @@ private:
     Grain grainPool[maxGrains];
 
     // These will later be linked to APVTS
-    float paramSpliceMs = 10.0f;
-    float paramDelayMs = 10.0f;
-    float paramPitch = 2.0f;     // 0.5 to 2.0
-    float paramDensity = 4.0f;   // 1 to 32
-    float paramFeedback = 0.75f;   // 0.0 to 1.0
-    float paramSpread = 0.05f;    // Jitter
+    float paramSpliceMs = 600.0f; // 0.1 to 2000 (ms)
+    float paramDelayMs = 10.0f;    // 0.1 to 1000 (ms)
+    float paramPitch = 2.0f;      // 0.5 to 2.0 (pitch scale)
+    float paramDensity = 16.0f;   // 1 to 32 (# grains)
+    float paramFeedback = 0.75f;  // 0.0 to 1.0 (%)
+    float paramSpread = 0.5f;     // 0.0 to 1.0 (in seconds)
     bool  paramReverse = true;
-    float paramMix = 0.95f;
+    float paramMix = 0.60f;
+
+    // DC blocker
+    float hpfState = 0.0f;
+    float lastFeedbackInput = 0.0f;
 
     int samplesUntilNextGrain;
     float lastOutput = 0.0f; // For feedback
