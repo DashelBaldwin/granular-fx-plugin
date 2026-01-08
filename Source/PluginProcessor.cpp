@@ -10,22 +10,18 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
                       #endif
                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
                      #endif
-                       )
-{
+                       ) {
 }
 
-AudioPluginAudioProcessor::~AudioPluginAudioProcessor()
-{
+AudioPluginAudioProcessor::~AudioPluginAudioProcessor() {
 }
 
 //==============================================================================
-const juce::String AudioPluginAudioProcessor::getName() const
-{
-    return JucePlugin_Name;
+const juce::String AudioPluginAudioProcessor::getName() const {
+    return "GranularFxPlugin";
 }
 
-bool AudioPluginAudioProcessor::acceptsMidi() const
-{
+bool AudioPluginAudioProcessor::acceptsMidi() const {
    #if JucePlugin_WantsMidiInput
     return true;
    #else
@@ -33,8 +29,7 @@ bool AudioPluginAudioProcessor::acceptsMidi() const
    #endif
 }
 
-bool AudioPluginAudioProcessor::producesMidi() const
-{
+bool AudioPluginAudioProcessor::producesMidi() const {
    #if JucePlugin_ProducesMidiOutput
     return true;
    #else
@@ -42,8 +37,7 @@ bool AudioPluginAudioProcessor::producesMidi() const
    #endif
 }
 
-bool AudioPluginAudioProcessor::isMidiEffect() const
-{
+bool AudioPluginAudioProcessor::isMidiEffect() const {
    #if JucePlugin_IsMidiEffect
     return true;
    #else
@@ -51,62 +45,48 @@ bool AudioPluginAudioProcessor::isMidiEffect() const
    #endif
 }
 
-double AudioPluginAudioProcessor::getTailLengthSeconds() const
-{
+double AudioPluginAudioProcessor::getTailLengthSeconds() const {
     return 0.0;
 }
 
-int AudioPluginAudioProcessor::getNumPrograms()
-{
+int AudioPluginAudioProcessor::getNumPrograms() {
     return 1;   // NB: some hosts don't cope very well if you tell them there are 0 programs,
                 // so this should be at least 1, even if you're not really implementing programs.
 }
 
-int AudioPluginAudioProcessor::getCurrentProgram()
-{
+int AudioPluginAudioProcessor::getCurrentProgram() {
     return 0;
 }
 
-void AudioPluginAudioProcessor::setCurrentProgram (int index)
-{
+void AudioPluginAudioProcessor::setCurrentProgram (int index) {
     juce::ignoreUnused (index);
 }
 
-const juce::String AudioPluginAudioProcessor::getProgramName (int index)
-{
+const juce::String AudioPluginAudioProcessor::getProgramName (int index) {
     juce::ignoreUnused (index);
     return {};
 }
 
-void AudioPluginAudioProcessor::changeProgramName (int index, const juce::String& newName)
-{
+void AudioPluginAudioProcessor::changeProgramName (int index, const juce::String& newName) {
     juce::ignoreUnused (index, newName);
 }
 
 //==============================================================================
-void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
-{
-    // Use this method as the place to do any pre-playback
-    // initialisation that you need..
-    juce::ignoreUnused (samplesPerBlock);
-
+void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock) {
     currentSampleRate = sampleRate;
-
-    delayBufferSize = static_cast<int>(currentSampleRate*5.0);
-
-    delayBuffer.setSize(getTotalNumInputChannels(), delayBufferSize);
-    delayBuffer.clear();
-    delayWritePos = 0;
+    
+    ringBuffer.respace(bufferSize);
+    
+    samplesUntilNextGrain = 0;
+    writePos = 0;
 }
 
-void AudioPluginAudioProcessor::releaseResources()
-{
+void AudioPluginAudioProcessor::releaseResources() {
     // When playback stops, you can use this as an opportunity to free up any
     // spare memory, etc.
 }
 
-bool AudioPluginAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
-{
+bool AudioPluginAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const {
   #if JucePlugin_IsMidiEffect
     juce::ignoreUnused (layouts);
     return true;
@@ -129,104 +109,95 @@ bool AudioPluginAudioProcessor::isBusesLayoutSupported (const BusesLayout& layou
   #endif
 }
 
-void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
-                                              juce::MidiBuffer& midiMessages)
-{
-    juce::ignoreUnused (midiMessages);
-    juce::ScopedNoDenormals noDenormals;
 
-    auto totalNumInputChannels  = getTotalNumInputChannels();
-    auto totalNumOutputChannels = getTotalNumOutputChannels();
+void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
+    juce::ignoreUnused (midiMessages);
+
+    juce::ScopedNoDenormals noDenormals;
+    auto totalNumInputChannels = getTotalNumInputChannels();
     auto numSamples = buffer.getNumSamples();
 
-    for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
-        buffer.clear (i, 0, numSamples);
+    // Calculate grain interval
+    float spliceSamples = (paramSpliceMs / 1000.0f) * (float)currentSampleRate;
+    int triggerInterval = static_cast<int>(spliceSamples / paramDensity);
 
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
-    {
-        const float* input = buffer.getReadPointer(channel);
-        float* delayData = delayBuffer.getWritePointer(channel);
-        
-        int tempWritePos = delayWritePos;
-        for (int i = 0; i < numSamples; ++i)
-        {
-            delayData[tempWritePos] = input[i];
-            if (++tempWritePos >= delayBufferSize) tempWritePos = 0;
-        }
-    }
+    // Get write pointer for the first channel (mono output for now)
+    auto* channelData = buffer.getWritePointer(0);
 
-    samplesUntilNextGrain -= numSamples;
-    if (samplesUntilNextGrain <= 0)
-    {
-        samplesUntilNextGrain = static_cast<int>(0.005 * currentSampleRate);
+    for (int i = 0; i < numSamples; ++i) {
+        float inputSample = channelData[i];
 
-        for (auto& g : grainPool)
-        {
-            if (!g.isActive)
-            {
-                g.durationSamples = static_cast<int>(0.1 * currentSampleRate);
-                g.samplesProcessed = 0;
-                
-                float jitter = (juce::Random::getSystemRandom().nextFloat() - 0.25f) * (currentSampleRate * 0.4f);
-                g.currentPos = delayWritePos - (0.45f * currentSampleRate) + jitter;
-                
-                while (g.currentPos < 0) g.currentPos += delayBufferSize;
-                while (g.currentPos >= delayBufferSize) g.currentPos -= delayBufferSize;
+        // --- FEEDBACK ---
+        // Add previous output back into buffer with tanh saturation
+        float feedbackSample = std::tanh(inputSample + (lastOutput * paramFeedback));
+        ringBuffer.write(feedbackSample, writePos);
 
-                g.isActive = true;
-                break; 
-            }
-        }
-    }
+        // --- TRIGGER GRAIN ---
+        // Trigger a new grain with delay and random spread at regular intervals
+        if (samplesUntilNextGrain <= 0) {
+            for (auto& g : grainPool) {
+                if (!g.isActive) {
+                    float delaySamples = (paramDelayMs / 1000.0f) * (float)currentSampleRate;
+                    float spread = juce::Random::getSystemRandom().nextFloat() * paramSpread * (float)currentSampleRate;
 
-    for (int i = 0; i < numSamples; ++i)
-    {
-        for (int channel = 0; channel < totalNumInputChannels; ++channel)
-        {
-            float* channelData = buffer.getWritePointer(channel);
-            float inputSample = channelData[i];
-            float grainOutput = 0.0f;
+                    float totalInitialOffset = delaySamples + spread;
 
-            for (auto& g : grainPool)
-            {
-                if (g.isActive)
-                {
-                    bool isLastChannel = (channel == totalNumInputChannels - 1);
-                    grainOutput += g.processSample(delayBuffer, channel, delayBufferSize, isLastChannel);
+                    g.trigger(writePos, totalInitialOffset, paramPitch, (int)spliceSamples, paramReverse);
+                    break;
                 }
             }
-
-            channelData[i] = (inputSample * 0.5f) + (grainOutput * 0.5f);
+            samplesUntilNextGrain = triggerInterval;
         }
+        samplesUntilNextGrain--;
+
+        // --- PROCESS ---
+        // Calculate sum of all active grains
+        float grainSum = 0.0f;
+        for (auto& g : grainPool) {
+            if (g.isActive)
+                grainSum += g.process(ringBuffer, bufferSize);
+        }
+
+        // --- VOLUME ADJUSTMENT AND MIX ---
+        // Scale grain volume by 1/sqrt(Density), calculate wet, crossfade dry and wet 
+        float densityScale = 1.0f / std::sqrt(paramDensity);
+        float wetSignal = grainSum * densityScale;
+        
+        float dryGain = std::cos(paramMix * juce::MathConstants<float>::halfPi);
+        float wetGain = std::sin(paramMix * juce::MathConstants<float>::halfPi);
+
+        float outputSample = (inputSample * dryGain) + (wetSignal * wetGain);
+        
+        channelData[i] = outputSample;
+        lastOutput = wetSignal; // Feedback only reads the wet signal
+
+        // Advance write ptr
+        writePos = (writePos + 1) % bufferSize;
     }
 
-    delayWritePos += numSamples;
-    if (delayWritePos >= delayBufferSize)
-        delayWritePos %= delayBufferSize;
+    // Copy mono channel to all other channels for output
+    for (int c = 1; c < totalNumInputChannels; ++c)
+        buffer.copyFrom(c, 0, buffer.getReadPointer(0), numSamples);
 }
 
 //==============================================================================
-bool AudioPluginAudioProcessor::hasEditor() const
-{
+bool AudioPluginAudioProcessor::hasEditor() const {
     return true; // (change this to false if you choose to not supply an editor)
 }
 
-juce::AudioProcessorEditor* AudioPluginAudioProcessor::createEditor()
-{
+juce::AudioProcessorEditor* AudioPluginAudioProcessor::createEditor() {
     return new AudioPluginAudioProcessorEditor (*this);
 }
 
 //==============================================================================
-void AudioPluginAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
-{
+void AudioPluginAudioProcessor::getStateInformation (juce::MemoryBlock& destData) {
     // You should use this method to store your parameters in the memory block.
     // You could do that either as raw data, or use the XML or ValueTree classes
     // as intermediaries to make it easy to save and load complex data.
     juce::ignoreUnused (destData);
 }
 
-void AudioPluginAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
-{
+void AudioPluginAudioProcessor::setStateInformation (const void* data, int sizeInBytes) {
     // You should use this method to restore your parameters from this memory block,
     // whose contents will have been created by the getStateInformation() call.
     juce::ignoreUnused (data, sizeInBytes);
@@ -234,7 +205,6 @@ void AudioPluginAudioProcessor::setStateInformation (const void* data, int sizeI
 
 //==============================================================================
 // This creates new instances of the plugin..
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
-{
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
     return new AudioPluginAudioProcessor();
 }

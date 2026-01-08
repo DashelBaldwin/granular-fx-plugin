@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "Grain.h"
+#include "CircularBuffer.h"
 
 //==============================================================================
 class AudioPluginAudioProcessor final : public juce::AudioProcessor
@@ -47,15 +48,25 @@ private:
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
 
-    static constexpr int maxGrains = 32; // Number of overlapping grains
-    Grain grainPool[maxGrains];          // Pre-allocated grains
-    
-    int grainIntervalSamples;            // How often to start a new grain
-    int samplesUntilNextGrain = 0;
+    int currentSampleRate = 44100;
 
-    double currentSampleRate = 44100.0;
+    CircularBuffer ringBuffer;
+    int writePos = 0;
+    int bufferSize = 1 << 18; // 6s at 44.1
 
-    juce::AudioBuffer<float> delayBuffer;
-    int delayWritePos = 0;
-    int delayBufferSize = 0;
+    static constexpr int maxGrains = 32;
+    Grain grainPool[maxGrains];
+
+    // These will later be linked to APVTS
+    float paramSpliceMs = 450.0f;
+    float paramDelayMs = 100.0f;
+    float paramPitch = 1.5f;     // 0.5 to 2.0
+    float paramDensity = 4.0f;   // 1 to 32
+    float paramFeedback = 0.6f;   // 0.0 to 1.0
+    float paramSpread = 0.3f;    // Jitter
+    bool  paramReverse = true;
+    float paramMix = 0.4f;
+
+    int samplesUntilNextGrain;
+    float lastOutput = 0.0f; // For feedback
 };

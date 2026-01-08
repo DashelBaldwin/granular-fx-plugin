@@ -34,11 +34,12 @@ set(SourceFiles
         Source/PluginProcessor.cpp
         Source/PluginProcessor.h
         Source/Grain.h
+        Source/CircularBuffer.h
 )
 
 # Change these to your own preferences
 juce_add_plugin(${PROJECT_NAME}
-        COMPANY_NAME dashelbaldwin
+        COMPANY_NAME dash
         IS_SYNTH FALSE
         NEEDS_MIDI_INPUT FALSE
         NEEDS_MIDI_OUTPUT FALSE
