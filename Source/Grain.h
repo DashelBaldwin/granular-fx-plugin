@@ -9,6 +9,8 @@ struct Grain {
     float envStep = 0.0f;
     float pitchRatio = 1.0f;
     float pan = 0.5f;
+    float leftGain = 0.707f;
+    float rightGain = 0.707f;
     bool isReverse = false;
     bool isActive = false;
 
@@ -19,7 +21,13 @@ struct Grain {
         envStep = 1.0f / (float)durationSamples;
         pitchRatio = pitch;
         isReverse = reverse;
+
+        // Precompute l/r gain since this is constant
         pan = newPan;
+        float panRads = pan * juce::MathConstants<float>::halfPi;
+        leftGain = std::cos(panRads);
+        rightGain = std::sin(panRads);
+
         isActive = true;
     }
 

@@ -74,6 +74,24 @@ void AudioPluginAudioProcessor::changeProgramName (int index, const juce::String
 //==============================================================================
 void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock) {
     currentSampleRate = sampleRate;
+
+    setupSmoother(paramSpliceMs, 600.0f);
+    setupSmoother(paramDelayMs, 20.0f);
+    setupSmoother(paramPitch, 2.0f);
+    setupSmoother(paramDensity, 2.0f);
+    setupSmoother(paramFeedback, 0.75f);
+    setupSmoother(paramSpread, 0.25f);
+    setupSmoother(paramWidth, 1.0f);
+    setupSmoother(paramTone, 0.90f);
+    setupSmoother(paramMix, 0.80f);
+    paramReverse = true;
+
+    samplesUntilNextGrain = 0;
+    writePos = 0;
+    hpfState = 0.0f;
+    lastFeedbackInput = 0.0f;
+    toneState = 0.0f;
+    lastOutput = 0.0f;
     
     circularBuffer.respace(bufferSize);
     
@@ -117,26 +135,29 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
     auto totalNumInputChannels = getTotalNumInputChannels();
     auto numSamples = buffer.getNumSamples();
 
-    // Calculate grain interval
-    float spliceSamples = (paramSpliceMs / 1000.0f) * (float)currentSampleRate;
-    int triggerInterval = static_cast<int>(spliceSamples / paramDensity);
+    // Once UI is set up, update targets for params here with setTargetValue()
 
     // Get write ptr for each channel
     auto* leftChannel = buffer.getWritePointer(0);
     auto* rightChannel = (totalNumInputChannels>1) ? buffer.getWritePointer(1) : nullptr;
 
-    // Calculate tone filter coefficients
-    float toneHz = juce::jmap(paramTone, 200.0f, 20000.0f); // Test if this linear scale is fine, otherwise change to logarithmic
-    float alpha = 1.0f - std::exp(-2.0f * juce::MathConstants<float>::pi * toneHz / (float)currentSampleRate);
-
     for (int i = 0; i < numSamples; ++i) {
+        float currentMix = paramMix.getNextValue();
+        float currentFeedback = paramFeedback.getNextValue();
+        float currentTone = paramTone.getNextValue();
+        float currentDensity = paramDensity.getNextValue();
+
+        // Calculate tone filter coefficients
+        float toneHz = juce::jmap(currentTone, 200.0f, 20000.0f); // Test if this linear scale is fine, otherwise change to logarithmic
+        float alpha = 1.0f - std::exp(-2.0f * juce::MathConstants<float>::pi * toneHz / (float)currentSampleRate);
+
         float inputL = leftChannel[i];
         float inputR = rightChannel ? rightChannel[i] : inputL;
         float monoInput = (inputL + inputR) * 0.5f;
 
         // --- FEEDBACK ---
         // Add previous output back into buffer with DC blocker, tone filter, and tanh saturation
-        float rawFeedback = monoInput + (lastOutput * paramFeedback);
+        float rawFeedback = monoInput + (lastOutput * currentFeedback);
 
         hpfState = 0.995f * (hpfState + rawFeedback - lastFeedbackInput);
         lastFeedbackInput = rawFeedback;
@@ -149,25 +170,35 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
         // --- TRIGGER GRAINS ---
         // Trigger a new grain with delay + random spread and panning at regular intervals
         if (samplesUntilNextGrain <= 0) {
+            // Calculate grain interval
+            float spliceMs = paramSpliceMs.getCurrentValue();
+            float spliceSamples = (spliceMs / 1000.0f) * (float)currentSampleRate;
+            float density = paramDensity.getCurrentValue();
+
+            int triggerInterval = static_cast<int>(spliceSamples / std::max(1.0f, density));
+
             for (auto& g : grainPool) {
                 if (!g.isActive) {
-                    float delaySamples = (paramDelayMs / 1000.0f) * (float)currentSampleRate;
+                    float pitch = paramPitch.getCurrentValue();
+                    float delayMs = paramDelayMs.getCurrentValue();
+                    float spread = paramSpread.getCurrentValue();
+                    float width = paramWidth.getCurrentValue();
+
+                    float delaySamples = (delayMs / 1000.0f) * (float)currentSampleRate;
 
                     // If our splice, delay, and pitch settings would cause this grain's read head to advance past 
                     // the write head, the grain should instead use the minimum delay value that avoids this problem
                     float safetyPadding = 512.0f;
-                    float minSafeDelay = paramReverse ? safetyPadding : (spliceSamples * paramPitch) + safetyPadding;
+                    float minSafeDelay = paramReverse ? safetyPadding : (spliceSamples * pitch) + safetyPadding;
 
                     float clampedBaseDelay = std::max(minSafeDelay, delaySamples);
-
-                    float spread = juce::Random::getSystemRandom().nextFloat() * paramSpread * (float)currentSampleRate;
-
-                    float totalInitialOffset = clampedBaseDelay + spread;
+                    float spreadSamples = juce::Random::getSystemRandom().nextFloat() * spread * (float)currentSampleRate;
+                    float totalInitialOffset = clampedBaseDelay + spreadSamples;
 
                     float randomSide = juce::Random::getSystemRandom().nextFloat() * 2.0f - 1.0f; // -1.0 to 1.0
-                    float grainPan = 0.5f + (randomSide * 0.5f * paramWidth);
+                    float grainPan = 0.5f + (randomSide * 0.5f * width);
 
-                    g.trigger(writePos, totalInitialOffset, paramPitch, (int)spliceSamples, paramReverse, grainPan);
+                    g.trigger(writePos, totalInitialOffset, pitch, (int)spliceSamples, paramReverse, grainPan);
                     break;
                 }
             }
@@ -183,21 +214,19 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
             if (g.isActive) {
                 float grainSample = g.process(circularBuffer, bufferSize);
 
-                // Constant power panning
-                float panRads = g.pan * juce::MathConstants<float>::halfPi;
-                grainSumL += grainSample * std::cos(panRads);
-                grainSumR += grainSample * std::sin(panRads);
+                grainSumL += grainSample * g.leftGain;
+                grainSumR += grainSample * g.rightGain;
             }
         }
 
         // --- VOLUME ADJUSTMENT AND MIX ---
         // Scale grain volume by 1/sqrt(Density), calculate wet, mix
-        float densityScale = 1.0f / std::sqrt(std::max(1.0f, paramDensity));
+        float densityScale = 1.0f / std::sqrt(std::max(1.0f, currentDensity));
         float wetL = grainSumL * densityScale;
         float wetR = grainSumR * densityScale;
         
-        float dryGain = std::cos(paramMix * juce::MathConstants<float>::halfPi);
-        float wetGain = std::sin(paramMix * juce::MathConstants<float>::halfPi);
+        float dryGain = std::cos(currentMix * juce::MathConstants<float>::halfPi);
+        float wetGain = std::sin(currentMix * juce::MathConstants<float>::halfPi);
         
         leftChannel[i] = (inputL * dryGain) + (wetL * wetGain);
         if (rightChannel) rightChannel[i] = (inputR * dryGain) + (wetR * wetGain);
