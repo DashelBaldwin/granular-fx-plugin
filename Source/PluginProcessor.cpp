@@ -1,6 +1,23 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+juce::AudioProcessorValueTreeState::ParameterLayout AudioPluginAudioProcessor::createParameterLayout() {
+    juce::AudioProcessorValueTreeState::ParameterLayout layout;
+
+    layout.add(std::make_unique<juce::AudioParameterFloat>("splice", "Splice (ms)", 0.1f, 2000.0f, 600.0f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("delay", "Delay (ms)", 0.1f, 1000.0f, 100.0f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("density", "Density", 1.0f, 32.0f, 2.0f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("pitch", "Pitch", 0.5f, 2.0f, 2.0f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("spread", "Spread", 0.0f, 1.0f, 0.15f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("width", "Width", 0.0f, 1.0f, 1.0f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("feedback", "Feedback", 0.0f, 1.0f, 0.75f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("tone", "Tone", 0.0f, 1.0f, 0.9f));
+    layout.add(std::make_unique<juce::AudioParameterBool>("reverse", "Reverse", true));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("mix", "Mix", 0.0f, 1.0f, 0.5f));
+
+    return layout;
+}
+
 //==============================================================================
 AudioPluginAudioProcessor::AudioPluginAudioProcessor()
      : AudioProcessor (BusesProperties()
@@ -11,6 +28,17 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
                      #endif
                        ) {
+    splicePtr = apvts.getRawParameterValue("splice");
+    delayPtr = apvts.getRawParameterValue("delay");
+    densityPtr = apvts.getRawParameterValue("density");
+    pitchPtr = apvts.getRawParameterValue("pitch");
+    spreadPtr = apvts.getRawParameterValue("spread");
+    feedbackPtr = apvts.getRawParameterValue("feedback");
+    widthPtr = apvts.getRawParameterValue("width");
+    tonePtr = apvts.getRawParameterValue("tone");
+    reversePtr = apvts.getRawParameterValue("reverse");
+    mixPtr = apvts.getRawParameterValue("mix");
+
 }
 
 AudioPluginAudioProcessor::~AudioPluginAudioProcessor() {
@@ -135,7 +163,16 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
     auto totalNumInputChannels = getTotalNumInputChannels();
     auto numSamples = buffer.getNumSamples();
 
-    // Once UI is set up, update targets for params here with setTargetValue()
+    paramSpliceMs.setTargetValue(splicePtr->load());
+    paramDelayMs.setTargetValue(delayPtr->load());
+    paramDensity.setTargetValue(densityPtr->load());
+    paramPitch.setTargetValue(pitchPtr->load());
+    paramSpread.setTargetValue(spreadPtr->load());
+    paramFeedback.setTargetValue(feedbackPtr->load());
+    paramWidth.setTargetValue(widthPtr->load());
+    paramTone.setTargetValue(tonePtr->load());
+    paramReverse = reversePtr->load() > 0.5f;
+    paramMix.setTargetValue(mixPtr->load());
 
     // Get write ptr for each channel
     auto* leftChannel = buffer.getWritePointer(0);
@@ -248,16 +285,15 @@ juce::AudioProcessorEditor* AudioPluginAudioProcessor::createEditor() {
 
 //==============================================================================
 void AudioPluginAudioProcessor::getStateInformation (juce::MemoryBlock& destData) {
-    // You should use this method to store your parameters in the memory block.
-    // You could do that either as raw data, or use the XML or ValueTree classes
-    // as intermediaries to make it easy to save and load complex data.
-    juce::ignoreUnused (destData);
+    auto state = apvts.copyState();
+    std::unique_ptr<juce::XmlElement> xml (state.createXml());
+    copyXmlToBinary (*xml, destData);
 }
 
 void AudioPluginAudioProcessor::setStateInformation (const void* data, int sizeInBytes) {
-    // You should use this method to restore your parameters from this memory block,
-    // whose contents will have been created by the getStateInformation() call.
-    juce::ignoreUnused (data, sizeInBytes);
+    std::unique_ptr<juce::XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
+    if (xmlState != nullptr)
+        apvts.replaceState (juce::ValueTree::fromXml (*xmlState));
 }
 
 //==============================================================================

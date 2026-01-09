@@ -43,6 +43,9 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+    juce::AudioProcessorValueTreeState apvts { *this, nullptr, "Parameters", createParameterLayout() };
+
 private:
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
@@ -58,25 +61,42 @@ private:
 
     int samplesUntilNextGrain;
 
-    // These will later be linked to APVTS
-    float paramSpliceMs = 600.0f; // 0.1 to 2000 (ms)
-    float paramDelayMs = 200.0f; // 0.1 to 1000 (ms)
-    float paramPitch = 2.0f; // 0.5 to 2.0 (pitch scale)
-    float paramDensity = 2.0f; // 1 to 32 (# grains)
-    float paramFeedback = 0.6f; // 0.0 to 1.0 (%)
-    float paramSpread = 0.1f; // 0.0 to 1.0 (in seconds)
-    float paramWidth = 1.0f; // 0.0 to 1.0
-    float paramTone = 0.85f; // 0.0 to 1.0
-    bool  paramReverse = true;
-    float paramMix = 0.40f;
+    juce::LinearSmoothedValue<float> paramSpliceMs;
+    juce::LinearSmoothedValue<float> paramDelayMs;
+    juce::LinearSmoothedValue<float> paramDensity;
+    juce::LinearSmoothedValue<float> paramPitch;
+    juce::LinearSmoothedValue<float> paramSpread;
+    juce::LinearSmoothedValue<float> paramFeedback;
+    juce::LinearSmoothedValue<float> paramWidth;
+    juce::LinearSmoothedValue<float> paramTone;
+    bool paramReverse = true;
+    juce::LinearSmoothedValue<float> paramMix;
 
     // DC blocker
-    float hpfState = 0.0f;
-    float lastFeedbackInput = 0.0f;
+    float hpfState;
+    float lastFeedbackInput;
 
     // Tone knob
-    float toneState = 0.0f;
+    float toneState;
 
     // Feedback
-    float lastOutput = 0.0f; 
+    float lastOutput; 
+
+    void setupSmoother(juce::LinearSmoothedValue<float>& smoother, float initialValue) {
+        smoother.reset(currentSampleRate, 0.05f);
+        smoother.setCurrentAndTargetValue(initialValue);
+    }
+
+    float getParam(juce::String paramID) { return apvts.getRawParameterValue(paramID)->load(); }
+
+    std::atomic<float>* splicePtr = nullptr;
+    std::atomic<float>* delayPtr = nullptr;
+    std::atomic<float>* densityPtr = nullptr;
+    std::atomic<float>* pitchPtr = nullptr;
+    std::atomic<float>* spreadPtr = nullptr;
+    std::atomic<float>* feedbackPtr = nullptr;
+    std::atomic<float>* widthPtr = nullptr;
+    std::atomic<float>* tonePtr = nullptr;
+    std::atomic<float>* reversePtr = nullptr;
+    std::atomic<float>* mixPtr = nullptr;
 };
