@@ -4,15 +4,15 @@
 juce::AudioProcessorValueTreeState::ParameterLayout AudioPluginAudioProcessor::createParameterLayout() {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
-    layout.add(std::make_unique<juce::AudioParameterFloat>("splice", "Splice (ms)", 0.1f, 2000.0f, 600.0f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("delay", "Delay (ms)", 0.1f, 1000.0f, 100.0f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("splice", "Splice (ms)", 0.01f, 2000.0f, 600.0f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("delay", "Delay (ms)", 1.0f, 1000.0f, 100.0f));
     layout.add(std::make_unique<juce::AudioParameterFloat>("density", "Density", 1.0f, 32.0f, 2.0f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("pitch", "Pitch", 0.5f, 2.0f, 2.0f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("spread", "Spread", 0.0f, 1.0f, 0.15f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("pitch", "Pitch", 0.5f, 4.0f, 2.0f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("spread", "Spread (s)", 0.001f, 1.0f, 0.15f));
     layout.add(std::make_unique<juce::AudioParameterFloat>("width", "Width", 0.0f, 1.0f, 1.0f));
     layout.add(std::make_unique<juce::AudioParameterFloat>("feedback", "Feedback", 0.0f, 1.0f, 0.75f));
     layout.add(std::make_unique<juce::AudioParameterFloat>("tone", "Tone", 0.0f, 1.0f, 0.9f));
-    layout.add(std::make_unique<juce::AudioParameterBool>("reverse", "Reverse", true));
+    layout.add(std::make_unique<juce::AudioParameterBool>("reverse", "Reverse", false));
     layout.add(std::make_unique<juce::AudioParameterFloat>("mix", "Mix", 0.0f, 1.0f, 0.5f));
 
     return layout;
@@ -185,6 +185,12 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
         float currentFeedback = paramFeedback.getNextValue();
         float currentTone = paramTone.getNextValue();
         float currentDensity = paramDensity.getNextValue();
+        
+        paramSpliceMs.getNextValue();
+        paramPitch.getNextValue();
+        paramDelayMs.getNextValue();
+        paramSpread.getNextValue();
+        paramWidth.getNextValue();
 
         // Calculate tone filter coefficients
         float toneHz = juce::jmap(currentTone, 200.0f, 20000.0f); // Test if this linear scale is fine, otherwise change to logarithmic
@@ -228,7 +234,11 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
                     // If our splice, delay, and pitch settings would cause this grain's read head to advance past 
                     // the write head, the grain should instead use the minimum delay value that avoids this problem
                     float safetyPadding = 512.0f;
-                    float minSafeDelay = paramReverse ? safetyPadding : (spliceSamples * pitch) + safetyPadding;
+                    float minSafeDelay = safetyPadding;
+
+                    if (!paramReverse && pitch > 1.0f) {
+                        minSafeDelay = (spliceSamples * (pitch - 1.0f)) + safetyPadding;
+                    }
 
                     float clampedBaseDelay = std::max(minSafeDelay, delaySamples);
                     float spreadSamples = juce::Random::getSystemRandom().nextFloat() * spread * (float)currentSampleRate;
