@@ -101,7 +101,9 @@ void AudioPluginAudioProcessor::changeProgramName (int index, const juce::String
 
 //==============================================================================
 void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock) {
-    currentSampleRate = sampleRate;
+    juce::ignoreUnused (samplesPerBlock);
+
+    currentSampleRate = (int)sampleRate;
 
     setupSmoother(paramSpliceMs, 600.0f);
     setupSmoother(paramDelayMs, 20.0f);
