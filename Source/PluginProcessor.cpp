@@ -233,12 +233,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
 
                     // If our splice, delay, and pitch settings would cause this grain's read head to advance past 
                     // the write head, the grain should instead use the minimum delay value that avoids this problem
-                    float safetyPadding = 512.0f;
-                    float minSafeDelay = safetyPadding;
-
-                    if (!paramReverse && pitch > 1.0f) {
-                        minSafeDelay = (spliceSamples * (pitch - 1.0f)) + safetyPadding;
-                    }
+                    float minSafeDelay = !paramReverse && pitch > 1.0f ? spliceSamples * (pitch - 1.0f) : 0.0;
 
                     float clampedBaseDelay = std::max(minSafeDelay, delaySamples);
                     float spreadSamples = juce::Random::getSystemRandom().nextFloat() * spread * (float)currentSampleRate;
