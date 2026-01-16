@@ -46,9 +46,13 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
     setupKnob("tone", "Tone");
     setupKnob("mix", "Mix");
 
+    setupKnob("spliceOffset", "Splice Offset (%)");
+    setupKnob("delayOffset", "Delay Offset (%)");
+    setupKnob("pitchOffset", "Pitch Offset (cents)");
+
     setupToggle("reverse", "Reverse");
 
-    setSize (600, 300);
+    setSize (700, 450);
 }
 
 AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor() {
@@ -63,7 +67,7 @@ void AudioPluginAudioProcessorEditor::resized() {
     auto area = getLocalBounds().reduced(20);
     
     const int cols = 5;
-    const int rows = 2;
+    const int rows = 3;
     const int width = area.getWidth() / cols;
     const int height = area.getHeight() / rows;
 
@@ -75,11 +79,10 @@ void AudioPluginAudioProcessorEditor::resized() {
         auto y = area.getY() + (row * height);
 
         juce::Rectangle<int> slot (x, y, width, height);
-        auto paddedSlot = slot.reduced(10);
         
         if (guiComponents[i]->slider.isVisible()) {
             guiComponents[i]->label.setBounds(slot.removeFromTop(20));
-            guiComponents[i]->slider.setBounds(slot);
+            guiComponents[i]->slider.setBounds(slot.reduced(5));
         } 
         else if (guiComponents[i]->reverseButton.isVisible()) {
             guiComponents[i]->reverseButton.setBounds(slot.reduced(10, 20));

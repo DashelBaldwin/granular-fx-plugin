@@ -72,15 +72,23 @@ private:
     bool paramReverse = true;
     juce::LinearSmoothedValue<float> paramMix;
 
+    juce::LinearSmoothedValue<float> paramPitchOffset;
+    juce::LinearSmoothedValue<float> paramSpliceOffset;
+    juce::LinearSmoothedValue<float> paramDelayOffset;
+
     // DC blocker
-    float hpfState;
-    float lastFeedbackInput;
+    float hpfStateL;
+    float hpfStateR;
+    float lastFeedL;
+    float lastFeedR;
 
     // Tone knob
-    float toneState;
+    float toneStateL;
+    float toneStateR;
 
     // Feedback
-    float lastOutput; 
+    float lastOutputL; 
+    float lastOutputR;
 
     void setupSmoother(juce::LinearSmoothedValue<float>& smoother, float initialValue) {
         smoother.reset(currentSampleRate, 0.05f);
@@ -99,4 +107,7 @@ private:
     std::atomic<float>* tonePtr = nullptr;
     std::atomic<float>* reversePtr = nullptr;
     std::atomic<float>* mixPtr = nullptr;
+    std::atomic<float>* pitchOffsetPtr = nullptr;
+    std::atomic<float>* spliceOffsetPtr = nullptr;
+    std::atomic<float>* delayOffsetPtr = nullptr;
 };
