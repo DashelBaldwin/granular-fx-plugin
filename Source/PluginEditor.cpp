@@ -1,15 +1,20 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+void AudioPluginAudioProcessorEditor::timerCallback() {
+    waveformVisualizer.processorBuffer = &processorRef.circularBuffer;
+    waveformVisualizer.grainPool = &processorRef.grainPool;
+    waveformVisualizer.currentWritePos = processorRef.writePos;
+    waveformVisualizer.repaint();
+}
+
 void AudioPluginAudioProcessorEditor::setupKnob(juce::String paramID, juce::String paramName) {
     auto component = std::make_unique<GuiComponent>();
 
-    // Knob
     component->slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     component->slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
     addAndMakeVisible(component->slider);
 
-    // Label
     component->label.setText(paramName, juce::dontSendNotification);
     component->label.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(component->label);
@@ -36,6 +41,8 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
     : AudioProcessorEditor (&p), processorRef (p) {
     juce::ignoreUnused (processorRef);
 
+    addAndMakeVisible(waveformVisualizer);
+
     setupKnob("splice", "Splice (ms)");
     setupKnob("delay", "Delay (ms)");
     setupKnob("density", "Density");
@@ -53,9 +60,11 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
     setupToggle("reverse", "Reverse");
 
     setSize (700, 450);
+    startTimerHz(60);
 }
 
 AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor() {
+    stopTimer();
 }
 
 //==============================================================================
@@ -65,6 +74,11 @@ void AudioPluginAudioProcessorEditor::paint (juce::Graphics& g) {
 
 void AudioPluginAudioProcessorEditor::resized() {
     auto area = getLocalBounds().reduced(20);
+
+    auto waveformArea = area.removeFromTop(80); 
+    waveformVisualizer.setBounds(waveformArea);
+    
+    area.removeFromTop(20);
     
     const int cols = 5;
     const int rows = 3;
@@ -89,3 +103,4 @@ void AudioPluginAudioProcessorEditor::resized() {
         }
     }
 }
+

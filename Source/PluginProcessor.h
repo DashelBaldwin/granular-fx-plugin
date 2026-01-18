@@ -46,18 +46,19 @@ public:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     juce::AudioProcessorValueTreeState apvts { *this, nullptr, "Parameters", createParameterLayout() };
 
+    //==============================================================================
+    CircularBuffer circularBuffer;
+    int writePos = 0;
+
+    static constexpr int maxGrains = 32;
+    std::array<Grain, maxGrains> grainPool;
+
 private:
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
 
     int currentSampleRate = 44100;
-
-    CircularBuffer circularBuffer;
-    int writePos = 0;
     int bufferSize = 1 << 18; // 6s at 44.1
-
-    static constexpr int maxGrains = 32;
-    Grain grainPool[maxGrains];
 
     int samplesUntilNextGrain;
 

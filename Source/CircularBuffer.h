@@ -35,6 +35,10 @@ public:
         return s1 + frac * (s2 - s1);
     }
 
+    const juce::AudioBuffer<float>& getRawBuffer() const { return buffer; }
+    
+    int getMask() const { return mask; }
+
 private:
     juce::AudioBuffer<float> buffer;
     int mask;

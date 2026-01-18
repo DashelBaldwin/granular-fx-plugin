@@ -31,7 +31,6 @@ struct Grain {
         pitchStepL = basePitchRatio * pitchMultiplierL;
         pitchStepR = basePitchRatio * pitchMultiplierR;
 
-
         // Splice offset
         float durSamplesL = (baseSpliceMs / 1000.0f) * (float)sampleRate;
         float durSamplesR = durSamplesL * (1.0f - (spliceOffsetPercent / 100.0f));

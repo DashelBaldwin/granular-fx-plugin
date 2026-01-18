@@ -246,7 +246,6 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
         float inputL = leftChannel[i];
         float inputR = rightChannel ? rightChannel[i] : inputL;
         
-
         // --- FEEDBACK ---
         // Add previous output back into buffer with DC blocker, tone filter, and tanh saturation
         float rawFeedL = inputL + (lastOutputL * curFeedback);
@@ -279,18 +278,20 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
             float totalReadSamplesL = spliceSamplesL * pitchL;
             float totalReadSamplesR = spliceSamplesR * pitchR;
 
-            // Extra delay needed to prevent wrap (only if pitch > 1)
-            float extraDelaySamplesL = std::max(0.0f, totalReadSamplesL - spliceSamplesL);
-            float extraDelaySamplesR = std::max(0.0f, totalReadSamplesR - spliceSamplesR);
-
-            // Convert to ms
-            float extraDelayMsL = (extraDelaySamplesL / currentSampleRate) * 1000.0f;
-            float extraDelayMsR = (extraDelaySamplesR / currentSampleRate) * 1000.0f;
-
-            float minSafeDelayMs = std::max(extraDelayMsL, extraDelayMsR);
-
             float spreadMs = juce::Random::getSystemRandom().nextFloat() * curSpread;
-            float finalBaseDelay = std::max(curDelay + spreadMs, minSafeDelayMs);
+
+            float finalBaseDelay = curDelay + spreadMs;
+
+            if (!paramReverse && pitchR > 1.0) {
+                    float extraDelaySamplesL = std::max(0.0f, totalReadSamplesL - spliceSamplesL);
+                    float extraDelaySamplesR = std::max(0.0f, totalReadSamplesR - spliceSamplesR);
+
+                    float extraDelayMsL = (extraDelaySamplesL / currentSampleRate) * 1000.0f;
+                    float extraDelayMsR = (extraDelaySamplesR / currentSampleRate) * 1000.0f;
+                    float minSafeDelayMs = std::max(extraDelayMsL, extraDelayMsR);
+                    
+                    finalBaseDelay = std::max(finalBaseDelay, minSafeDelayMs);
+            } 
 
             for (auto& g : grainPool) {
                 if (!g.isActive) {
@@ -343,7 +344,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
         lastOutputL = wetL; 
         lastOutputR = wetR; 
 
-        writePos = (writePos + 1) % bufferSize;
+        writePos = (writePos + 1) & (bufferSize - 1);
     }
 }
 
