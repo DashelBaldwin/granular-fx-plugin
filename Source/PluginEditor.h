@@ -97,13 +97,14 @@ private:
                         float distanceCovered = (envIndex / envStep) * pitchStep;
 
                         float startSampleRaw = readPos - (distanceCovered * direction);
+                        if (direction < 0.0f) startSampleRaw -= (grainLenSamples * pitchStep);
                         
                         int startSampleWrapped = (int)(startSampleRaw) & mask;
                         
                         float pixelPerSample = width / (float)totalSamples;
                         
                         float xStart = (float)startSampleWrapped * pixelPerSample;
-                        float xWidth = (grainLenSamples * pitchStep) * pixelPerSample; // Width based on amount of audio consumed
+                        float xWidth = (grainLenSamples * pitchStep) * pixelPerSample;
                         float xReadPos = ((int)readPos & mask) * pixelPerSample;
 
                         g.setColour(color);
