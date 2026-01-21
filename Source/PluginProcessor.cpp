@@ -322,7 +322,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
                 float outL = 0.0f;
                 float outR = 0.0f;
                 
-                g.process(circularBuffer, outL, outR);
+                g.process(circularBuffer, outL, outR, writePos, bufferSize-1, &rightChannelCollision, &rightChannelCollisionSamples);
 
                 grainSumL += outL;
                 grainSumR += outR;

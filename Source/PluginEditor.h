@@ -14,6 +14,10 @@ public:
     void timerCallback();
 
 private:
+    bool collisionVisualTrigger = false;
+    float collisionSamplesText = 0.0f;
+    int collisionDecay = 0;
+
     struct WaveformVisualizer : public juce::Component {
         CircularBuffer* processorBuffer = nullptr;
 

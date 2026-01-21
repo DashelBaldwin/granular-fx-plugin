@@ -55,7 +55,8 @@ struct Grain {
 
     }
 
-    void process(const CircularBuffer& buffer, float& outL, float& outR) {
+    void process(const CircularBuffer& buffer, float& outL, float& outR,
+                 int writePos, int mask, std::atomic<bool>* collisionFlag, std::atomic<float>* collisionSamples) {
         if (!isActive) {
             outL = 0.0f;
             outR = 0.0f;
@@ -75,6 +76,18 @@ struct Grain {
 
         float sampleR = 0.0f;
         if (envIndexR < 1.0f) {
+            if (collisionFlag != nullptr) {
+                float dist = (readPosR - ((mask + 1) * std::floor(readPosR / (mask + 1)))) - (float)writePos;
+
+                while (dist < -(mask + 1) / 2.0f) dist += (mask + 1);
+                while (dist >= (mask + 1) / 2.0f) dist -= (mask + 1);
+
+                if (dist > -0.0f) {
+                    *collisionFlag = true;
+                    *collisionSamples = dist;
+                }
+            }
+
             float windowR = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * envIndexR));
             sampleR = buffer.read(1, readPosR) * windowR;
 

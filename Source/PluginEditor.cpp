@@ -5,7 +5,28 @@ void AudioPluginAudioProcessorEditor::timerCallback() {
     waveformVisualizer.processorBuffer = &processorRef.circularBuffer;
     waveformVisualizer.grainPool = &processorRef.grainPool;
     waveformVisualizer.currentWritePos = processorRef.writePos;
+
+    if (processorRef.rightChannelCollision.load()) {
+        float s = processorRef.rightChannelCollisionSamples.load();
+        collisionSamplesText = std::max(s, collisionSamplesText);
+
+        collisionVisualTrigger = true;
+        collisionDecay = 12;
+        
+        processorRef.rightChannelCollision.store(false);
+    } 
+    else if (collisionDecay > 0) {
+        collisionDecay--;
+        if (collisionDecay < 12) collisionVisualTrigger = false;
+    } 
+    else {
+        collisionSamplesText = 0.0f;
+        processorRef.rightChannelCollisionSamples = 0.0f;
+    }
+
+
     waveformVisualizer.repaint();
+    repaint();
 }
 
 void AudioPluginAudioProcessorEditor::setupKnob(juce::String paramID, juce::String paramName) {
@@ -69,7 +90,21 @@ AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor() {
 
 //==============================================================================
 void AudioPluginAudioProcessorEditor::paint (juce::Graphics& g) {
-    g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
+    g.fillAll (juce::Colour (0xff0B0C0D));
+
+    g.setColour(juce::Colour (0x88ffffff));
+    if (collisionDecay > 0) {
+        g.setColour(juce::Colours::red);
+    }
+
+    if (collisionVisualTrigger) {
+        g.drawRect(getLocalBounds(), 5.0f);
+    }
+
+    g.setFont(18.0f);
+    g.drawText(juce::String(collisionSamplesText, 1), 
+                getLocalBounds().reduced(40), 
+                juce::Justification::bottomRight);
 }
 
 void AudioPluginAudioProcessorEditor::resized() {
