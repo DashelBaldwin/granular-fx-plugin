@@ -316,8 +316,8 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
             float pitchR = curPitch * std::pow(2.0f,  curPitchOff / 1200.0f);
 
             // Effective splice lengths in samples
-            float spliceSamplesL = (curSplice / 1000.0f) * currentSampleRate;
-            float spliceSamplesR = spliceSamplesL * (1.0f - (curSpliceOff / 100.0f));
+            float spliceSamplesL = std::ceil((curSplice / 1000.0f) * currentSampleRate);
+            float spliceSamplesR = std::ceil(spliceSamplesL * (1.0f - (curSpliceOff / 100.0f)));
 
             // Total read distance per channel
             float totalReadSamplesL = spliceSamplesL * pitchL;
@@ -331,9 +331,9 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
                     float extraDelaySamplesL = std::max(0.0f, totalReadSamplesL - spliceSamplesL);
                     float extraDelaySamplesR = std::max(0.0f, totalReadSamplesR - spliceSamplesR);
 
-                    float extraDelayMsL = (extraDelaySamplesL / currentSampleRate) * 1000.0f;
-                    float extraDelayMsR = (extraDelaySamplesR / currentSampleRate) * 1000.0f;
-                    float minSafeDelayMs = std::max(extraDelayMsL, extraDelayMsR) + 1.0f;
+                    float safeMsL = (extraDelaySamplesL / currentSampleRate) * 1000.0f;
+                    float safeMsR = (extraDelaySamplesR / currentSampleRate) * 1000.0f;
+                    float minSafeDelayMs = std::max(safeMsL, safeMsR);
                     
                     finalBaseDelay = std::max(finalBaseDelay, minSafeDelayMs);
             } 

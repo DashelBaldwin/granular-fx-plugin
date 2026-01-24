@@ -49,7 +49,7 @@ juce_add_plugin(${PROJECT_NAME}
         COPY_PLUGIN_AFTER_BUILD TRUE
         PLUGIN_MANUFACTURER_CODE ABCD
         PLUGIN_CODE ABCD
-        FORMATS VST3
+        FORMATS VST3 Standalone
         PRODUCT_NAME "GranularFxPlugin"        
 )
 
