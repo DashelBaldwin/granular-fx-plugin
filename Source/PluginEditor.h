@@ -14,6 +14,10 @@ public:
     void timerCallback();
 
 private:
+    bool collisionVisualTrigger = false;
+    float collisionSamplesText = 0.0f;
+    int collisionDecay = 0;
+
     struct WaveformVisualizer : public juce::Component {
         CircularBuffer* processorBuffer = nullptr;
 
@@ -22,7 +26,7 @@ private:
         int currentWritePos = 0;
 
         void paint(juce::Graphics& g) override {
-            g.fillAll(juce::Colours::black.withAlpha(0.9f));
+            g.fillAll(juce::Colours::black.withAlpha(0.5f));
             
             if (processorBuffer == nullptr) return;
 
@@ -124,12 +128,29 @@ private:
 
                     float direction = grain.isReverse ? -1.0f : 1.0f;
 
+                    float progressL = 0.0f;
+                    float stepL = 0.0f;
+
+                    if (grain.totalSamplesL > 0) {
+                        progressL = (float)grain.samplesProcessedL / (float)grain.totalSamplesL;
+                        stepL = 1.0f / (float)grain.totalSamplesL;
+                    }
+
                     drawGrain(0.0f, midY, 
-                            grain.readPosL, grain.envIndexL, grain.envStepL, grain.pitchStepL, 
+                            grain.readPosL, progressL, stepL, grain.pitchStepL, 
                             direction, juce::Colours::white.withAlpha(0.015f));
 
+
+                    float progressR = 0.0f;
+                    float stepR = 0.0f;
+
+                    if (grain.totalSamplesR > 0) {
+                        progressR = (float)grain.samplesProcessedR / (float)grain.totalSamplesR;
+                        stepR = 1.0f / (float)grain.totalSamplesR;
+                    }
+
                     drawGrain(midY, height, 
-                            grain.readPosR, grain.envIndexR, grain.envStepR, grain.pitchStepR, 
+                            grain.readPosR, progressR, stepR, grain.pitchStepR, 
                             direction, juce::Colours::white.withAlpha(0.015f));
                 }
             }

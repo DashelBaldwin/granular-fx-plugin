@@ -46,6 +46,45 @@ juce::AudioProcessorValueTreeState::ParameterLayout AudioPluginAudioProcessor::c
     return layout;
 }
 
+void AudioPluginAudioProcessor::logGrainStats(const Grain& g) {
+    juce::ScopedLock lock(logMutex);
+    
+    bool errorL = g.actualSamplesReadL > g.expectedSamplesL;
+    bool errorR = g.actualSamplesReadR > g.expectedSamplesR;
+    bool hasError = errorL || errorR;
+    
+    juce::String logEntry;
+    
+    if (hasError) {
+        logEntry << "[ERROR] ";
+    }
+
+    logEntry << "Grain started at buffer sample: " << g.startBufferSample << "\n";
+    logEntry << "Initial finalBaseDelay: " << juce::String(g.initFinalBaseDelay, 4);
+    logEntry << "Initial readPosR: " << juce::String(g.initReadPosR, 4);
+    logEntry << "Initial writePos: " << g.initWritePos;
+    logEntry << "writePos at collision: " << g.writePosAtCollision;
+
+    logEntry << "  L channel - Expected: " << juce::String(g.expectedSamplesL, 2) 
+             << " samples, Actual: " << juce::String(g.actualSamplesReadL, 2) << " samples";
+    if (errorL) {
+        logEntry << " [OVERREAD: " << juce::String(g.actualSamplesReadL - g.expectedSamplesL, 2) << "]";
+    }
+    logEntry << "\n";
+    
+    logEntry << "  R channel - Expected: " << juce::String(g.expectedSamplesR, 2) 
+             << " samples, Actual: " << juce::String(g.actualSamplesReadR, 2) << " samples";
+    if (errorR) {
+        logEntry << " [OVERREAD: " << juce::String(g.actualSamplesReadR - g.expectedSamplesR, 2) << "]";
+    }
+    if (g.collision) {
+        logEntry << "[COLLISION DETECTED: " << juce::String(g.cs, 2) << "]";
+    }
+    logEntry << "\n\n";
+    
+    logFile.appendText(logEntry);
+}
+
 //==============================================================================
 AudioPluginAudioProcessor::AudioPluginAudioProcessor()
      : AudioProcessor (BusesProperties()
@@ -69,6 +108,12 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
     pitchOffsetPtr  = apvts.getRawParameterValue("pitchOffset");
     spliceOffsetPtr = apvts.getRawParameterValue("spliceOffset");
     delayOffsetPtr  = apvts.getRawParameterValue("delayOffset");
+
+    logFile = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+                .getChildFile("GranularFxDebug.log");
+
+    logFile.deleteFile();
+    logFile.create();
 }
 
 AudioPluginAudioProcessor::~AudioPluginAudioProcessor() {
@@ -240,7 +285,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
         float curDelayOff  = paramDelayOffset.getNextValue();
 
         // Calculate tone filter coefficients
-        float toneHz = juce::jmap(curTone, 200.0f, 20000.0f); // Test if this linear scale is fine, otherwise change to logarithmic
+        float toneHz = juce::jmap(curTone, 200.0f, 20000.0f);
         float alpha = 1.0f - std::exp(-2.0f * juce::MathConstants<float>::pi * toneHz / (float)currentSampleRate);
 
         float inputL = leftChannel[i];
@@ -271,8 +316,8 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
             float pitchR = curPitch * std::pow(2.0f,  curPitchOff / 1200.0f);
 
             // Effective splice lengths in samples
-            float spliceSamplesL = (curSplice / 1000.0f) * currentSampleRate;
-            float spliceSamplesR = spliceSamplesL * (1.0f - (curSpliceOff / 100.0f));
+            float spliceSamplesL = std::ceil((curSplice / 1000.0f) * currentSampleRate);
+            float spliceSamplesR = std::ceil(spliceSamplesL * (1.0f - (curSpliceOff / 100.0f)));
 
             // Total read distance per channel
             float totalReadSamplesL = spliceSamplesL * pitchL;
@@ -286,9 +331,9 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
                     float extraDelaySamplesL = std::max(0.0f, totalReadSamplesL - spliceSamplesL);
                     float extraDelaySamplesR = std::max(0.0f, totalReadSamplesR - spliceSamplesR);
 
-                    float extraDelayMsL = (extraDelaySamplesL / currentSampleRate) * 1000.0f;
-                    float extraDelayMsR = (extraDelaySamplesR / currentSampleRate) * 1000.0f;
-                    float minSafeDelayMs = std::max(extraDelayMsL, extraDelayMsR);
+                    float safeMsL = (extraDelaySamplesL / currentSampleRate) * 1000.0f;
+                    float safeMsR = (extraDelaySamplesR / currentSampleRate) * 1000.0f;
+                    float minSafeDelayMs = std::max(safeMsL, safeMsR);
                     
                     finalBaseDelay = std::max(finalBaseDelay, minSafeDelayMs);
             } 
@@ -322,10 +367,13 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
                 float outL = 0.0f;
                 float outR = 0.0f;
                 
-                g.process(circularBuffer, outL, outR);
+                bool wasActive = g.isActive;
+                g.process(circularBuffer, outL, outR, writePos, bufferSize-1, &rightChannelCollision, &rightChannelCollisionSamples);
+                if (wasActive && !g.isActive) { logGrainStats(g); }
 
                 grainSumL += outL;
                 grainSumR += outR;
+                
             }
         }
 

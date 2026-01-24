@@ -53,6 +53,9 @@ public:
     static constexpr int maxGrains = 32;
     std::array<Grain, maxGrains> grainPool;
 
+    std::atomic<bool> rightChannelCollision { false };
+    std::atomic<float> rightChannelCollisionSamples { 0.0f };
+
 private:
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
@@ -111,4 +114,8 @@ private:
     std::atomic<float>* pitchOffsetPtr = nullptr;
     std::atomic<float>* spliceOffsetPtr = nullptr;
     std::atomic<float>* delayOffsetPtr = nullptr;
+
+    void logGrainStats(const Grain& g);
+    juce::File logFile;
+    juce::CriticalSection logMutex;
 };
