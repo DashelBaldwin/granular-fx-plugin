@@ -92,10 +92,8 @@ struct Grain {
 
         float direction = isReverse ? -1.0f : 1.0f;
 
-        // LEFT CHANNEL
         float sampleL = 0.0f;
         if (samplesProcessedL < totalSamplesL) {
-            // Calculate envIndex on the fly for the window
             float envIndex = (float)samplesProcessedL / (float)totalSamplesL;
             float windowL = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * envIndex));
             
@@ -106,7 +104,6 @@ struct Grain {
             actualSamplesReadL += std::abs(pitchStepL);
         }
 
-        // RIGHT CHANNEL
         float sampleR = 0.0f;
         if (samplesProcessedR < totalSamplesR) {
             if (collisionFlag != nullptr) {
@@ -118,7 +115,6 @@ struct Grain {
                     wrappedDist -= size;
                 }
 
-                // If distance is positive, Read is AHEAD of Write (Collision)
                 if (wrappedDist > 0) {
                     *collisionFlag = true;
                     *collisionSamples = (float)wrappedDist;
