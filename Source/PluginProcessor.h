@@ -114,4 +114,8 @@ private:
     std::atomic<float>* pitchOffsetPtr = nullptr;
     std::atomic<float>* spliceOffsetPtr = nullptr;
     std::atomic<float>* delayOffsetPtr = nullptr;
+
+    void logGrainStats(const Grain& g);
+    juce::File logFile;
+    juce::CriticalSection logMutex;
 };

@@ -26,7 +26,7 @@ private:
         int currentWritePos = 0;
 
         void paint(juce::Graphics& g) override {
-            g.fillAll(juce::Colours::black.withAlpha(0.9f));
+            g.fillAll(juce::Colours::black.withAlpha(0.5f));
             
             if (processorBuffer == nullptr) return;
 

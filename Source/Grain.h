@@ -19,6 +19,19 @@ struct Grain {
     bool isReverse = false;
     bool isActive = false;
 
+    int startBufferSample = 0;
+    float expectedSamplesL = 0.0f;
+    float expectedSamplesR = 0.0f;
+    float actualSamplesReadL = 0.0f;
+    float actualSamplesReadR = 0.0f;
+    bool collision = false;
+    float cs = 0.0f;
+
+    float initFinalBaseDelay = 0.0f;
+    float initReadPosR = 0.0f;
+    int initWritePos = 0;
+    int writePosAtCollision = 0;
+
     void trigger(int writePos, double sampleRate, 
              float baseDelayMs, float delayOffsetPercent,
              float basePitchRatio, float pitchOffsetCents,
@@ -49,9 +62,19 @@ struct Grain {
         float panRads = newPan * juce::MathConstants<float>::halfPi;
         leftGain = std::cos(panRads);
         rightGain = std::sin(panRads);
+
+        startBufferSample = writePos;
+        expectedSamplesL = durSamplesL * std::abs(pitchStepL);
+        expectedSamplesR = durSamplesR * std::abs(pitchStepR);
+        actualSamplesReadL = 0.0f;
+        actualSamplesReadR = 0.0f;
         
         isReverse = reverse;
         isActive = true;
+
+        initFinalBaseDelay = baseDelayMs;
+        initReadPosR = readPosR;
+        initWritePos = writePos;
 
     }
 
@@ -72,19 +95,28 @@ struct Grain {
 
             readPosL += pitchStepL * direction;
             envIndexL += envStepL;
+
+            actualSamplesReadL += std::abs(pitchStepL);
         }
 
         float sampleR = 0.0f;
         if (envIndexR < 1.0f) {
             if (collisionFlag != nullptr) {
-                float dist = (readPosR - ((mask + 1) * std::floor(readPosR / (mask + 1)))) - (float)writePos;
+                int size = mask + 1;
+                
+                int rInt = static_cast<int>(std::floor(readPosR));
+                int wrappedDist = (rInt - writePos) & mask;
 
-                while (dist < -(mask + 1) / 2.0f) dist += (mask + 1);
-                while (dist >= (mask + 1) / 2.0f) dist -= (mask + 1);
+                if (wrappedDist > (size / 2)) {
+                    wrappedDist -= size;
+                }
 
-                if (dist > -0.0f) {
+                if (wrappedDist > 0) {
                     *collisionFlag = true;
-                    *collisionSamples = dist;
+                    *collisionSamples = (float)wrappedDist + (readPosR - std::floor(readPosR));
+                    cs = (float)wrappedDist + (readPosR - std::floor(readPosR));
+                    collision = true;
+                    writePosAtCollision = writePos;
                 }
             }
 
@@ -93,6 +125,8 @@ struct Grain {
 
             readPosR += pitchStepR * direction;
             envIndexR += envStepR;
+
+            actualSamplesReadR += std::abs(pitchStepR);
         }
 
         outL = sampleL * leftGain;
