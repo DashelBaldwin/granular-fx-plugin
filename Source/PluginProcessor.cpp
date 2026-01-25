@@ -4,86 +4,82 @@
 juce::AudioProcessorValueTreeState::ParameterLayout AudioPluginAudioProcessor::createParameterLayout() {
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
 
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "splice", "Splice (ms)", 
-        juce::NormalisableRange<float>(0.05f, 2000.0f, 0.05f, 0.35f), 
-        600.0f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "delay", "Delay (ms)", 
-        juce::NormalisableRange<float>(0.0f, 1000.0f, 1.0f, 0.4f), 
-        100.0f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "density", "Density", 
-        juce::NormalisableRange<float>(1.0f, 32.0f, 1.0f, 1.0f), 
-        2.0f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "pitch", "Pitch", 
-        juce::NormalisableRange<float>(0.25f, 4.0f, 0.0f, 1.0f, true), 
-        2.0f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "spread", "Spread (ms)", 
-        juce::NormalisableRange<float>(0.0f, 500.0f, 0.0f, 0.4f), 
-        150.0f));
+    auto addFloat = [&](
+        const juce::String& id, 
+        const juce::String& name, 
+        float min, 
+        float max, 
+        float step,
+        float def, 
+        float skew = 1.0f, 
+        bool symmetric = false
+    ) {
+        layout.add(std::make_unique<juce::AudioParameterFloat>(
+            id, 
+            name, 
+            juce::NormalisableRange<float>(min, max, step, skew, symmetric), 
+            def
+        ));
+    };
 
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "width", "Width", 0.0f, 1.0f, 1.0f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "feedback", "Feedback", 0.0f, 1.0f, 0.75f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "tone", "Tone", 0.0f, 1.0f, 0.9f));
-    layout.add(std::make_unique<juce::AudioParameterBool>(
-        "reverse", "Reverse", false));
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "mix", "Mix", 0.0f, 1.0f, 0.5f));
+    addFloat("splice", "Splice (ms)", 0.10f, 2000.0f, 0.1f, 600.0f, 0.3f);
+    addFloat("delay", "Delay (ms)", 0.0f, 1000.0f, 0.1f, 150.0f, 0.3f);
+    addFloat("density", "Density", 1.0f, 32.0f, 0.1f, 2.0f);
+    addFloat("pitch", "Pitch", 0.25f, 4.0f, 0.0f, 2.0f, 1.0f, true);
+    addFloat("spread", "Spread (ms)", 0.0f, 500.0f, 0.1f, 150.0f, 0.3f);
 
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "pitchOffset", "Pitch Offset (Cents)", 0.0f, 4800.0f, 0.0f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "spliceOffset", "Splice Offset (%)", 0.0f, 99.0f, 0.0f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "delayOffset", "Delay Offset (%)", 0.0f, 99.0f, 0.0f));
+    addFloat("width", "Width", 0.0f, 1.0f, 0.01f, 1.0f);
+    addFloat("feedback", "Feedback", 0.0f, 1.0f, 0.01f, 0.75f);
+    addFloat("tone", "Tone", 0.0f, 1.0f, 0.01f, 0.9f);
+    addFloat("mix", "Mix", 0.0f, 1.0f, 0.01f, 0.5f);
+
+    layout.add(std::make_unique<juce::AudioParameterBool>("reverse", "Reverse", true));
+
+    addFloat("pitchOffset", "Pitch Offset (Cents)", 0.0f, 4800.0f, 1.0f, 0.0f);
+    addFloat("spliceOffset", "Splice Offset (%)", 0.0f, 99.0f, 1.0f, 0.0f);
+    addFloat("delayOffset", "Delay Offset (%)", 0.0f, 99.0f, 1.0f, 0.0f);
 
     return layout;
 }
 
-void AudioPluginAudioProcessor::logGrainStats(const Grain& g) {
-    juce::ScopedLock lock(logMutex);
+// void AudioPluginAudioProcessor::logGrainStats(const Grain& g) {
+//     juce::ScopedLock lock(logMutex);
     
-    bool errorL = g.actualSamplesReadL > g.expectedSamplesL;
-    bool errorR = g.actualSamplesReadR > g.expectedSamplesR;
-    bool hasError = errorL || errorR;
+//     bool errorL = g.actualSamplesReadL > g.expectedSamplesL;
+//     bool errorR = g.actualSamplesReadR > g.expectedSamplesR;
+//     bool hasError = errorL || errorR;
     
-    juce::String logEntry;
+//     juce::String logEntry;
     
-    if (hasError) {
-        logEntry << "[ERROR] ";
-    }
+//     if (hasError) {
+//         logEntry << "[ERROR] ";
+//     }
 
-    logEntry << "Grain started at buffer sample: " << g.startBufferSample << "\n";
-    logEntry << "Initial finalBaseDelay: " << juce::String(g.initFinalBaseDelay, 4);
-    logEntry << "Initial readPosR: " << juce::String(g.initReadPosR, 4);
-    logEntry << "Initial writePos: " << g.initWritePos;
-    logEntry << "writePos at collision: " << g.writePosAtCollision;
+//     logEntry << "Grain started at buffer sample: " << g.startBufferSample << "\n";
+//     logEntry << "Initial finalBaseDelay: " << juce::String(g.initFinalBaseDelay, 4);
+//     logEntry << "Initial readPosR: " << juce::String(g.initReadPosR, 4);
+//     logEntry << "Initial writePos: " << g.initWritePos;
+//     logEntry << "writePos at collision: " << g.writePosAtCollision;
 
-    logEntry << "  L channel - Expected: " << juce::String(g.expectedSamplesL, 2) 
-             << " samples, Actual: " << juce::String(g.actualSamplesReadL, 2) << " samples";
-    if (errorL) {
-        logEntry << " [OVERREAD: " << juce::String(g.actualSamplesReadL - g.expectedSamplesL, 2) << "]";
-    }
-    logEntry << "\n";
+//     logEntry << "  L channel - Expected: " << juce::String(g.expectedSamplesL, 2) 
+//              << " samples, Actual: " << juce::String(g.actualSamplesReadL, 2) << " samples";
+//     if (errorL) {
+//         logEntry << " [OVERREAD: " << juce::String(g.actualSamplesReadL - g.expectedSamplesL, 2) << "]";
+//     }
+//     logEntry << "\n";
     
-    logEntry << "  R channel - Expected: " << juce::String(g.expectedSamplesR, 2) 
-             << " samples, Actual: " << juce::String(g.actualSamplesReadR, 2) << " samples";
-    if (errorR) {
-        logEntry << " [OVERREAD: " << juce::String(g.actualSamplesReadR - g.expectedSamplesR, 2) << "]";
-    }
-    if (g.collision) {
-        logEntry << "[COLLISION DETECTED: " << juce::String(g.cs, 2) << "]";
-    }
-    logEntry << "\n\n";
+//     logEntry << "  R channel - Expected: " << juce::String(g.expectedSamplesR, 2) 
+//              << " samples, Actual: " << juce::String(g.actualSamplesReadR, 2) << " samples";
+//     if (errorR) {
+//         logEntry << " [OVERREAD: " << juce::String(g.actualSamplesReadR - g.expectedSamplesR, 2) << "]";
+//     }
+//     if (g.collision) {
+//         logEntry << "[COLLISION DETECTED: " << juce::String(g.cs, 2) << "]";
+//     }
+//     logEntry << "\n\n";
     
-    logFile.appendText(logEntry);
-}
+//     logFile.appendText(logEntry);
+// }
 
 //==============================================================================
 AudioPluginAudioProcessor::AudioPluginAudioProcessor()
@@ -109,11 +105,11 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
     spliceOffsetPtr = apvts.getRawParameterValue("spliceOffset");
     delayOffsetPtr  = apvts.getRawParameterValue("delayOffset");
 
-    logFile = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-                .getChildFile("GranularFxDebug.log");
-
-    logFile.deleteFile();
-    logFile.create();
+    // logFile = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+    //             .getChildFile("GranularFxDebug.log");
+    // 
+    // logFile.deleteFile();
+    // logFile.create();
 }
 
 AudioPluginAudioProcessor::~AudioPluginAudioProcessor() {
@@ -180,20 +176,22 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
 
     currentSampleRate = (int)sampleRate;
 
-    setupSmoother(paramSpliceMs, 600.0f);
-    setupSmoother(paramDelayMs, 20.0f);
-    setupSmoother(paramPitch, 2.0f);
-    setupSmoother(paramDensity, 2.0f);
-    setupSmoother(paramFeedback, 0.75f);
-    setupSmoother(paramSpread, 0.25f);
-    setupSmoother(paramWidth, 1.0f);
-    setupSmoother(paramTone, 0.90f);
-    setupSmoother(paramMix, 0.80f);
+    setupSmoother(paramSpliceMs, splicePtr->load());
+    setupSmoother(paramDelayMs, delayPtr->load());
+    setupSmoother(paramDensity, densityPtr->load());
+    setupSmoother(paramPitch, pitchPtr->load());
+    setupSmoother(paramSpread, spreadPtr->load());
+
+    setupSmoother(paramWidth, widthPtr->load());
+    setupSmoother(paramFeedback, feedbackPtr->load());
+    setupSmoother(paramTone, tonePtr->load());
+    setupSmoother(paramMix, mixPtr->load());
+
     paramReverse = true;
 
-    setupSmoother(paramPitchOffset, 0.0f);
-    setupSmoother(paramSpliceOffset, 0.0f);
-    setupSmoother(paramDelayOffset, 0.0f);
+    setupSmoother(paramPitchOffset, pitchOffsetPtr->load());
+    setupSmoother(paramSpliceOffset, spliceOffsetPtr->load());
+    setupSmoother(paramDelayOffset, delayOffsetPtr->load());
 
     samplesUntilNextGrain = 0;
     writePos = 0;
@@ -338,18 +336,27 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
                     finalBaseDelay = std::max(finalBaseDelay, minSafeDelayMs);
             } 
 
+            double delaySampL = (finalBaseDelay / 1000.0) * currentSampleRate;
+            double delaySampR = delaySampL * (1.0 - (curDelayOff / 100.0));
+
             for (auto& g : grainPool) {
                 if (!g.isActive) {
 
                     // Random pan, can add ping pong and dual later
                     float randomSide = juce::Random::getSystemRandom().nextFloat() * 2.0f - 1.0f; 
                     float grainPan = 0.5f + (randomSide * 0.5f * curWidth);
+                    float panRads = grainPan * juce::MathConstants<float>::halfPi;
+                    float gainL = std::cos(panRads);
+                    float gainR = std::sin(panRads);
 
-                    g.trigger(writePos, (double)currentSampleRate,
-                              finalBaseDelay, curDelayOff,
-                              curPitch, curPitchOff,
-                              curSplice, curSpliceOff,
-                              paramReverse, grainPan);
+                    g.trigger(
+                        writePos,
+                        (int)spliceSamplesL, (int)spliceSamplesR,
+                        delaySampL, delaySampR,
+                        (double)pitchL, (double)pitchR,
+                        gainL, gainR,
+                        paramReverse
+                    );
                     break;
                 }
             }
@@ -367,9 +374,9 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, 
                 float outL = 0.0f;
                 float outR = 0.0f;
                 
-                bool wasActive = g.isActive;
+                // bool wasActive = g.isActive;
                 g.process(circularBuffer, outL, outR, writePos, bufferSize-1, &rightChannelCollision, &rightChannelCollisionSamples);
-                if (wasActive && !g.isActive) { logGrainStats(g); }
+                // if (wasActive && !g.isActive) { logGrainStats(g); }
 
                 grainSumL += outL;
                 grainSumR += outR;

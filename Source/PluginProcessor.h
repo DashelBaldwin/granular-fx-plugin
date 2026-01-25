@@ -95,7 +95,7 @@ private:
     float lastOutputR;
 
     void setupSmoother(juce::LinearSmoothedValue<float>& smoother, float initialValue) {
-        smoother.reset(currentSampleRate, 0.05f);
+        smoother.reset(currentSampleRate, 0.025f);
         smoother.setCurrentAndTargetValue(initialValue);
     }
 
@@ -115,7 +115,7 @@ private:
     std::atomic<float>* spliceOffsetPtr = nullptr;
     std::atomic<float>* delayOffsetPtr = nullptr;
 
-    void logGrainStats(const Grain& g);
-    juce::File logFile;
-    juce::CriticalSection logMutex;
+    // void logGrainStats(const Grain& g);
+    // juce::File logFile;
+    // juce::CriticalSection logMutex;
 };

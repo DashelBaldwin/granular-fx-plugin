@@ -3,143 +3,152 @@
 #include "CircularBuffer.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 
+struct GrainChannel {
+    double readPos = 0.0;
+    double pitchStep = 0.0;
+    int totalSamples = 0;
+    int samplesProcessed = 0;
+
+    // Debug
+    double actualSamplesRead = 0.0;
+
+    void reset(int durationSamples, double startReadPos, double step) {
+        totalSamples = durationSamples;
+        readPos = startReadPos;
+        pitchStep = step;
+        samplesProcessed = 0;
+        actualSamplesRead = 0.0;
+    }
+
+    // Calculate and set the output level for this channel, return false when the channel is finished playing
+    bool getNextSample(
+        const CircularBuffer& buffer, 
+        int channelIndex, 
+        float& outputSample, 
+        bool reverse, 
+        int writePos = 0, 
+        int mask = 0, 
+        // Debug params
+        std::atomic<bool>* collisionFlag = nullptr, 
+        std::atomic<float>* collisionSamples = nullptr, 
+        float* debugCollisionPos = nullptr, 
+        int* debugWritePosCol = nullptr
+    ) {
+        if (samplesProcessed >= totalSamples) {
+            outputSample = 0.0f;
+            return false;
+        }
+
+        // Debug
+        if (collisionFlag != nullptr) {
+            int size = mask + 1;
+            int rInt = static_cast<int>(std::floor(readPos));
+            int wrappedDist = (rInt - writePos) & mask;
+
+            if (wrappedDist > (size / 2)) { wrappedDist -= size; }
+
+            if (wrappedDist > 0) {
+                *collisionFlag = true;
+                if (collisionSamples) *collisionSamples = (float)wrappedDist;
+                if (debugCollisionPos) *debugCollisionPos = (float)wrappedDist;
+                if (debugWritePosCol) *debugWritePosCol = writePos;
+            }
+        }
+
+        // Calculate hanning window
+        float envIndex = (float)samplesProcessed / (float)totalSamples;
+        float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * envIndex));
+
+        // Read from buffer and advance
+        outputSample = buffer.read(channelIndex, readPos) * window;
+        
+        float direction = reverse ? -1.0f : 1.0f;
+        readPos += pitchStep * direction;
+        
+        samplesProcessed++;
+
+        actualSamplesRead += std::abs(pitchStep);
+
+        return true;
+    }
+};
+
 struct Grain {
-    double readPosL = 0.0;
-    double readPosR = 0.0;
-
-    int totalSamplesL = 0;
-    int samplesProcessedL = 0;
-
-    int totalSamplesR = 0;
-    int samplesProcessedR = 0;
-
-    double pitchStepL = 0.0;
-    double pitchStepR = 0.0;
+    GrainChannel chL;
+    GrainChannel chR;
 
     float leftGain = 0.707f;
     float rightGain = 0.707f;
-
     bool isReverse = false;
-
     bool isActive = false;
 
+    // Debug 
     int startBufferSample = 0;
     double expectedSamplesL = 0.0;
     double expectedSamplesR = 0.0;
-    double actualSamplesReadL = 0.0;
-    double actualSamplesReadR = 0.0;
-    bool collision = false;
-    float cs = 0.0f;
-
     float initFinalBaseDelay = 0.0f;
     double initReadPosR = 0.0;
     int initWritePos = 0;
+    
+    // Debug
+    bool collision = false;
+    float cs = 0.0f;
     int writePosAtCollision = 0;
 
-    void trigger(int writePos, double sampleRate, 
-             float baseDelayMs, float delayOffsetPercent,
-             float basePitchRatio, float pitchOffsetCents,
-             float baseSpliceMs, float spliceOffsetPercent,
-             bool reverse, float newPan) {
+    // Debug
+    double getActualSamplesReadL() const { return chL.actualSamplesRead; }
+    double getActualSamplesReadR() const { return chR.actualSamplesRead; }
 
-        // Pitch offset
-        double pitchMultiplierL = std::pow(2.0, -pitchOffsetCents / 1200.0);
-        double pitchMultiplierR = std::pow(2.0, pitchOffsetCents / 1200.0);
-        pitchStepL = (double)basePitchRatio * pitchMultiplierL;
-        pitchStepR = (double)basePitchRatio * pitchMultiplierR;
+    // These parameters are assumed to be safe; a minimum safe delay must be calculated and enforced beforehand
+    void trigger(
+        int writePos, 
+        int durSamplesL, int durSamplesR,
+        double delaySamplesL, double delaySamplesR,
+        double stepL, double stepR,
+        float gainL, float gainR,
+        bool reverse
+    ) {
+        chL.reset(durSamplesL, (double)writePos - delaySamplesL, stepL);
+        chR.reset(durSamplesR, (double)writePos - delaySamplesR, stepR);
 
-        // Splice offset
-        float durSamplesL = (baseSpliceMs / 1000.0f) * (float)sampleRate;
-        float durSamplesR = durSamplesL * (1.0f - (spliceOffsetPercent / 100.0f));
-
-        totalSamplesL = (int)std::ceil(durSamplesL);
-        totalSamplesR = (int)std::ceil(durSamplesR);
-        
-        samplesProcessedL = 0;
-        samplesProcessedR = 0;
-
-        // Delay offset
-        double samplesDelayL = (baseDelayMs / 1000.0) * sampleRate;
-        double samplesDelayR = samplesDelayL * (1.0 - (delayOffsetPercent / 100.0));
-
-        readPosL = (double)writePos - samplesDelayL;
-        readPosR = (double)writePos - samplesDelayR;
-
-        float panRads = newPan * juce::MathConstants<float>::halfPi;
-        leftGain = std::cos(panRads);
-        rightGain = std::sin(panRads);
-
-        startBufferSample = writePos;
-        expectedSamplesL = (double)totalSamplesL * std::abs(pitchStepL);
-        expectedSamplesR = (double)totalSamplesR * std::abs(pitchStepR);
-        actualSamplesReadL = 0.0;
-        actualSamplesReadR = 0.0;
+        leftGain = gainL;
+        rightGain = gainR;
         
         isReverse = reverse;
         isActive = true;
 
-        initFinalBaseDelay = baseDelayMs;
-        initReadPosR = readPosR;
+        // Debug 
+        startBufferSample = writePos;
+        expectedSamplesL = (double)chL.totalSamples * std::abs(stepL);
+        expectedSamplesR = (double)chR.totalSamples * std::abs(stepR);
         initWritePos = writePos;
-
+        collision = false;
     }
 
-    void process(const CircularBuffer& buffer, float& outL, float& outR,
-                 int writePos, int mask, std::atomic<bool>* collisionFlag, std::atomic<float>* collisionSamples) {
+    void process(const CircularBuffer& buffer, float& outL, float& outR, int writePos, 
+        int mask, std::atomic<bool>* collisionFlag, std::atomic<float>* collisionSamples
+    ) {
         if (!isActive) {
             outL = 0.0f; outR = 0.0f; return;
         }
 
-        float direction = isReverse ? -1.0f : 1.0f;
-
         float sampleL = 0.0f;
-        if (samplesProcessedL < totalSamplesL) {
-            float envIndex = (float)samplesProcessedL / (float)totalSamplesL;
-            float windowL = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * envIndex));
-            
-            sampleL = buffer.read(0, readPosL) * windowL;
-            readPosL += pitchStepL * direction;
-            
-            samplesProcessedL++;
-            actualSamplesReadL += std::abs(pitchStepL);
-        }
-
         float sampleR = 0.0f;
-        if (samplesProcessedR < totalSamplesR) {
-            if (collisionFlag != nullptr) {
-                int size = mask + 1;
-                int rInt = static_cast<int>(std::floor(readPosR));
-                int wrappedDist = (rInt - writePos) & mask;
 
-                if (wrappedDist > (size / 2)) {
-                    wrappedDist -= size;
-                }
+        bool activeL = chL.getNextSample(buffer, 0, sampleL, isReverse);
 
-                if (wrappedDist > 0) {
-                    *collisionFlag = true;
-                    *collisionSamples = (float)wrappedDist;
-                    cs = (float)wrappedDist;
-                    collision = true;
-                    writePosAtCollision = writePos;
-                }
-            }
-
-            float envIndex = (float)samplesProcessedR / (float)totalSamplesR;
-            float windowR = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * envIndex));
-            
-            sampleR = buffer.read(1, readPosR) * windowR;
-            readPosR += pitchStepR * direction;
-            
-            samplesProcessedR++;
-            actualSamplesReadR += std::abs(pitchStepR);
-        }
+        bool activeR = chR.getNextSample(buffer, 1, sampleR, isReverse, 
+                                         writePos, mask, 
+                                         collisionFlag, collisionSamples, 
+                                         &cs, &writePosAtCollision);
+        
+        if (cs > 0.0f) collision = true; // Debug
 
         outL = sampleL * leftGain;
         outR = sampleR * rightGain;
 
-        if (samplesProcessedL >= totalSamplesL && samplesProcessedR >= totalSamplesR) {
+        if (!activeL && !activeR) {
             isActive = false;
         }
     }
 };
-

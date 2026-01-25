@@ -131,26 +131,26 @@ private:
                     float progressL = 0.0f;
                     float stepL = 0.0f;
 
-                    if (grain.totalSamplesL > 0) {
-                        progressL = (float)grain.samplesProcessedL / (float)grain.totalSamplesL;
-                        stepL = 1.0f / (float)grain.totalSamplesL;
+                    if (grain.chL.totalSamples > 0) {
+                        progressL = (float)grain.chL.samplesProcessed / (float)grain.chL.totalSamples;
+                        stepL = 1.0f / (float)grain.chL.totalSamples;
                     }
 
                     drawGrain(0.0f, midY, 
-                            grain.readPosL, progressL, stepL, grain.pitchStepL, 
+                            grain.chL.readPos, progressL, stepL, grain.chL.pitchStep, 
                             direction, juce::Colours::white.withAlpha(0.015f));
 
 
                     float progressR = 0.0f;
                     float stepR = 0.0f;
 
-                    if (grain.totalSamplesR > 0) {
-                        progressR = (float)grain.samplesProcessedR / (float)grain.totalSamplesR;
-                        stepR = 1.0f / (float)grain.totalSamplesR;
+                    if (grain.chR.totalSamples > 0) {
+                        progressR = (float)grain.chR.samplesProcessed / (float)grain.chR.totalSamples;
+                        stepR = 1.0f / (float)grain.chR.totalSamples;
                     }
 
                     drawGrain(midY, height, 
-                            grain.readPosR, progressR, stepR, grain.pitchStepR, 
+                            grain.chR.readPos, progressR, stepR, grain.chR.pitchStep, 
                             direction, juce::Colours::white.withAlpha(0.015f));
                 }
             }
